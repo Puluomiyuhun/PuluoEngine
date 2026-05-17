@@ -41,7 +41,8 @@ bool Model::Load(const std::string& filepath) {
     const aiScene* scene = importer.ReadFile(filepath,
         aiProcess_Triangulate |
         aiProcess_GenSmoothNormals |
-        aiProcess_CalcTangentSpace
+        aiProcess_CalcTangentSpace |
+        aiProcess_PreTransformVertices
     );
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {

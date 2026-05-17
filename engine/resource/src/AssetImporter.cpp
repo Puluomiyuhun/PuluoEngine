@@ -189,7 +189,8 @@ std::string AssetImporter::WriteModelPAsset(const std::string& sourcePath, const
     const aiScene* scene = importer.ReadFile(sourcePath,
         aiProcess_Triangulate |
         aiProcess_GenSmoothNormals |
-        aiProcess_CalcTangentSpace);
+        aiProcess_CalcTangentSpace |
+        aiProcess_PreTransformVertices);
 
     if (!scene || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) || !scene->mRootNode) {
         PULUO_CORE_ERROR("AssetImporter: Assimp error for '{}': {}", sourcePath, importer.GetErrorString());
