@@ -1412,7 +1412,7 @@ void DrawAssetBrowser(std::string& importPath, std::string& scenePath) {
             for (nfdpathsetsize_t i = 0; i < count; i++) {
                 nfdu8char_t* p = nullptr;
                 if (NFD_PathSet_GetPath(pathSet, i, &p) == NFD_OKAY && p) {
-                    std::string result = AssetImporter::ImportModelToProject(p);
+                    std::string result = AssetImporter::ImportModelToProject(p, currentDir.string());
                     if (!result.empty()) {
                         PULUO_CORE_INFO("Imported model to project: {}", result);
                     }
@@ -1432,7 +1432,7 @@ void DrawAssetBrowser(std::string& importPath, std::string& scenePath) {
             for (nfdpathsetsize_t i = 0; i < count; i++) {
                 nfdu8char_t* p = nullptr;
                 if (NFD_PathSet_GetPath(pathSet, i, &p) == NFD_OKAY && p) {
-                    std::string result = AssetImporter::ImportTextureToProject(p);
+                    std::string result = AssetImporter::ImportTextureToProject(p, currentDir.string());
                     if (!result.empty()) {
                         PULUO_CORE_INFO("Imported texture to project: {}", result);
                     }
