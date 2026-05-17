@@ -805,6 +805,20 @@ public:
                 if (ImGui::MenuItem("Redo", "Ctrl+Y", false, m_CommandHistory.CanRedo())) m_CommandHistory.Redo();
                 ImGui::EndMenu();
             }
+            if (ImGui::BeginMenu("View")) {
+                if (ImGui::BeginMenu("Theme")) {
+                    auto current = Puluo::ImGuiLayer::GetCurrentTheme();
+                    for (int i = 0; i < static_cast<int>(Puluo::EditorTheme::Count); ++i) {
+                        auto t = static_cast<Puluo::EditorTheme>(i);
+                        bool selected = (t == current);
+                        if (ImGui::MenuItem(Puluo::ImGuiLayer::GetThemeName(t), nullptr, selected)) {
+                            Puluo::ImGuiLayer::ApplyTheme(t);
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+                ImGui::EndMenu();
+            }
             ImGui::EndMenuBar();
         }
 
@@ -1298,6 +1312,36 @@ private:
                         auto& obj = m_Scene.AddObject(data.name, model);
                         obj.modelPath = data.modelPath;
                         obj.transform = data.transform;
+                        // Apply material overrides
+                        if (!data.materialOverrides.empty()) {
+                            obj.materialOverrides = data.materialOverrides;
+                            auto& materials = model->GetMutableMaterials();
+                            for (auto& [slot, ovr] : obj.materialOverrides) {
+                                if (slot < 0 || slot >= static_cast<int>(materials.size())) continue;
+                                auto& mat = materials[slot];
+                                mat.albedo = ovr.albedo;
+                                mat.metallic = ovr.metallic;
+                                mat.roughness = ovr.roughness;
+                                mat.ao = ovr.ao;
+                                mat.alphaCutoff = ovr.alphaCutoff;
+                                mat.useAlphaMask = ovr.useAlphaMask;
+                                mat.useSSS = ovr.useSSS;
+                                mat.sssColor = ovr.sssColor;
+                                mat.sssStrength = ovr.sssStrength;
+                                if (!ovr.albedoMapPath.empty())
+                                    mat.albedoMap = Puluo::TextureCache::Load(ovr.albedoMapPath);
+                                if (!ovr.normalMapPath.empty())
+                                    mat.normalMap = Puluo::TextureCache::Load(ovr.normalMapPath);
+                                if (!ovr.metallicMapPath.empty())
+                                    mat.metallicMap = Puluo::TextureCache::Load(ovr.metallicMapPath);
+                                if (!ovr.roughnessMapPath.empty())
+                                    mat.roughnessMap = Puluo::TextureCache::Load(ovr.roughnessMapPath);
+                                if (!ovr.aoMapPath.empty())
+                                    mat.aoMap = Puluo::TextureCache::Load(ovr.aoMapPath);
+                                if (!ovr.maskMapPath.empty())
+                                    mat.maskMap = Puluo::TextureCache::Load(ovr.maskMapPath);
+                            }
+                        }
                     } else {
                         PULUO_CORE_WARN("Failed to load model for '{0}': {1}", data.name, data.modelPath);
                     }

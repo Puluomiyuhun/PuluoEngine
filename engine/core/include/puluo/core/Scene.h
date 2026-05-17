@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <map>
 #include <memory>
 #include <fstream>
 #include <optional>
@@ -138,6 +139,28 @@ struct Transform {
     }
 };
 
+// Per-material-slot override data (texture .passet paths + PBR parameters)
+struct MaterialOverrideData {
+    // Texture override paths (empty = use model default)
+    std::string albedoMapPath;
+    std::string normalMapPath;
+    std::string metallicMapPath;
+    std::string roughnessMapPath;
+    std::string aoMapPath;
+    std::string maskMapPath;
+
+    // PBR scalar parameters
+    Vec3 albedo{1.0f};
+    float metallic = 0.0f;
+    float roughness = 0.5f;
+    float ao = 1.0f;
+    float alphaCutoff = 0.5f;
+    bool useAlphaMask = false;
+    bool useSSS = false;
+    Vec3 sssColor{0.5f, 0.8f, 0.2f};
+    float sssStrength = 0.5f;
+};
+
 struct SceneObject {
     std::string name;
     std::string modelPath;
@@ -148,6 +171,7 @@ struct SceneObject {
     std::optional<SceneInstancedMeshData> instancedMesh; // If present, this object is an instanced mesh group
     std::optional<SceneTerrainData> terrain;    // If present, this object is terrain
     std::optional<SceneWaterData> water;        // If present, this object is a water plane
+    std::map<int, MaterialOverrideData> materialOverrides; // Per-slot material overrides
 };
 
 struct SceneObjectData {
@@ -159,6 +183,7 @@ struct SceneObjectData {
     std::optional<SceneInstancedMeshData> instancedMesh;
     std::optional<SceneTerrainData> terrain;
     std::optional<SceneWaterData> water;
+    std::map<int, MaterialOverrideData> materialOverrides;
 };
 
 class Scene {
@@ -311,6 +336,29 @@ public:
                 jW["opacity"] = w.opacity;
                 jW["fresnelPower"] = w.fresnelPower;
                 jObj["water"] = jW;
+            }
+            if (!obj.materialOverrides.empty()) {
+                nlohmann::json jOverrides = nlohmann::json::object();
+                for (const auto& [slot, ovr] : obj.materialOverrides) {
+                    nlohmann::json jMat;
+                    if (!ovr.albedoMapPath.empty()) jMat["albedoMapPath"] = ovr.albedoMapPath;
+                    if (!ovr.normalMapPath.empty()) jMat["normalMapPath"] = ovr.normalMapPath;
+                    if (!ovr.metallicMapPath.empty()) jMat["metallicMapPath"] = ovr.metallicMapPath;
+                    if (!ovr.roughnessMapPath.empty()) jMat["roughnessMapPath"] = ovr.roughnessMapPath;
+                    if (!ovr.aoMapPath.empty()) jMat["aoMapPath"] = ovr.aoMapPath;
+                    if (!ovr.maskMapPath.empty()) jMat["maskMapPath"] = ovr.maskMapPath;
+                    jMat["albedo"] = {ovr.albedo.x, ovr.albedo.y, ovr.albedo.z};
+                    jMat["metallic"] = ovr.metallic;
+                    jMat["roughness"] = ovr.roughness;
+                    jMat["ao"] = ovr.ao;
+                    jMat["alphaCutoff"] = ovr.alphaCutoff;
+                    jMat["useAlphaMask"] = ovr.useAlphaMask;
+                    jMat["useSSS"] = ovr.useSSS;
+                    jMat["sssColor"] = {ovr.sssColor.x, ovr.sssColor.y, ovr.sssColor.z};
+                    jMat["sssStrength"] = ovr.sssStrength;
+                    jOverrides[std::to_string(slot)] = jMat;
+                }
+                jObj["materialOverrides"] = jOverrides;
             }
             j["objects"].push_back(jObj);
         }
@@ -479,6 +527,36 @@ public:
                 wd.opacity = jW.value("opacity", 0.85f);
                 wd.fresnelPower = jW.value("fresnelPower", 3.0f);
                 data.water = wd;
+            }
+            if (jObj.contains("materialOverrides")) {
+                auto& jOverrides = jObj["materialOverrides"];
+                for (auto it = jOverrides.begin(); it != jOverrides.end(); ++it) {
+                    int slot = std::stoi(it.key());
+                    auto& jMat = it.value();
+                    MaterialOverrideData ovr;
+                    ovr.albedoMapPath = jMat.value("albedoMapPath", std::string(""));
+                    ovr.normalMapPath = jMat.value("normalMapPath", std::string(""));
+                    ovr.metallicMapPath = jMat.value("metallicMapPath", std::string(""));
+                    ovr.roughnessMapPath = jMat.value("roughnessMapPath", std::string(""));
+                    ovr.aoMapPath = jMat.value("aoMapPath", std::string(""));
+                    ovr.maskMapPath = jMat.value("maskMapPath", std::string(""));
+                    if (jMat.contains("albedo")) {
+                        auto& a = jMat["albedo"];
+                        ovr.albedo = {a[0].get<float>(), a[1].get<float>(), a[2].get<float>()};
+                    }
+                    ovr.metallic = jMat.value("metallic", 0.0f);
+                    ovr.roughness = jMat.value("roughness", 0.5f);
+                    ovr.ao = jMat.value("ao", 1.0f);
+                    ovr.alphaCutoff = jMat.value("alphaCutoff", 0.5f);
+                    ovr.useAlphaMask = jMat.value("useAlphaMask", false);
+                    ovr.useSSS = jMat.value("useSSS", false);
+                    if (jMat.contains("sssColor")) {
+                        auto& sc = jMat["sssColor"];
+                        ovr.sssColor = {sc[0].get<float>(), sc[1].get<float>(), sc[2].get<float>()};
+                    }
+                    ovr.sssStrength = jMat.value("sssStrength", 0.5f);
+                    data.materialOverrides[slot] = ovr;
+                }
             }
             result.push_back(std::move(data));
         }
