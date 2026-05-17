@@ -35,6 +35,7 @@
 #include "puluo/renderer/RenderContext.h"
 #include "puluo/resource/TextureCache.h"
 #include "puluo/resource/ModelCache.h"
+#include "puluo/resource/AssetImporter.h"
 #include "puluo/platform/ImGuiLayer.h"
 
 #include "EditorPanels.h"
@@ -888,6 +889,16 @@ public:
             m_GizmoWasUsing = isUsing;
         }
 
+        // FPS overlay in viewport top-left
+        {
+            ImGui::SetCursorScreenPos(ImVec2(vpMin.x + 8, vpMin.y + 8));
+            float fps = ImGui::GetIO().Framerate;
+            float ms = 1000.0f / fps;
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
+            ImGui::Text("%.1f FPS (%.2f ms)", fps, ms);
+            ImGui::PopStyleColor();
+        }
+
         ImGui::End(); // Viewport
         ImGui::PopStyleVar();
 
@@ -971,6 +982,13 @@ public:
             ImportModel();
         }
         if (!browserImportPath.empty()) {
+            // If it's a raw model from browser, import to project first
+            std::string ext = std::filesystem::path(browserImportPath).extension().string();
+            for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext != ".passet") {
+                std::string passetPath = Puluo::AssetImporter::ImportModelToProject(browserImportPath);
+                if (!passetPath.empty()) browserImportPath = passetPath;
+            }
             ImportModelFromPath(browserImportPath);
         }
     }
@@ -1022,8 +1040,12 @@ private:
         nfdresult_t result = NFD_OpenDialogU8(&outPath, filters, 1, nullptr);
 
         if (result == NFD_OKAY && outPath) {
-            ImportModelFromPath(outPath);
+            // Import to project: external .glb → assets/models/xxx.passet
+            std::string passetPath = Puluo::AssetImporter::ImportModelToProject(outPath);
             NFD_FreePathU8(outPath);
+            if (!passetPath.empty()) {
+                ImportModelFromPath(passetPath);
+            }
         }
     }
 

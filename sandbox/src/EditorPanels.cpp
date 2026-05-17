@@ -1,10 +1,13 @@
 #include "EditorPanels.h"
 
+#include "puluo/core/Log.h"
 #include "puluo/renderer/Model.h"
 #include "puluo/renderer/Texture2D.h"
 #include "puluo/renderer/Particle.h"
 #include "puluo/renderer/Renderer.h"
 #include "puluo/resource/TextureCache.h"
+#include "puluo/resource/AssetImporter.h"
+#include "puluo/resource/AssetFormat.h"
 
 #include <imgui.h>
 #include <ImGuizmo.h>
@@ -12,6 +15,7 @@
 #include <nfd.h>
 #include <glad/gl.h>
 #include <filesystem>
+#include <fstream>
 #include <algorithm>
 #include <random>
 #include <chrono>
@@ -56,14 +60,21 @@ static std::vector<std::shared_ptr<Texture2D>> s_TerrainTextures;
 // Helper: load a texture via file dialog, returns {GL texture ID, path} (0/"" on cancel)
 static std::pair<uint32_t, std::string> LoadTerrainTextureDialog() {
     nfdu8char_t* outPath = nullptr;
-    nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp" };
+    nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp,passet" };
     nfdopendialogu8args_t args = {0};
     args.filterList = &filter;
     args.filterCount = 1;
     if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY) {
         std::string pathStr(outPath);
-        auto tex = TextureCache::Load(pathStr);
         NFD_FreePathU8(outPath);
+        // External image file: import to project first, then load .passet
+        std::string ext = std::filesystem::path(pathStr).extension().string();
+        for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (ext != ".passet") {
+            std::string passetPath = AssetImporter::ImportTextureToProject(pathStr);
+            if (!passetPath.empty()) pathStr = passetPath;
+        }
+        auto tex = TextureCache::Load(pathStr);
         if (tex && tex->GetRendererID()) {
             s_TerrainTextures.push_back(tex);
             return {tex->GetRendererID(), pathStr};
@@ -93,13 +104,20 @@ static void MaterialTexSlotUI(const char* label, std::shared_ptr<Texture2D>& tex
     ImGui::SameLine();
     if (ImGui::SmallButton("Browse")) {
         nfdu8char_t* outPath = nullptr;
-        nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp" };
+        nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp,passet" };
         nfdopendialogu8args_t args = {0};
         args.filterList = &filter;
         args.filterCount = 1;
         if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY) {
             std::string pathStr(outPath);
             NFD_FreePathU8(outPath);
+            // External image: import to project first
+            std::string ext = std::filesystem::path(pathStr).extension().string();
+            for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext != ".passet") {
+                std::string passetPath = AssetImporter::ImportTextureToProject(pathStr);
+                if (!passetPath.empty()) pathStr = passetPath;
+            }
             auto tex = TextureCache::Load(pathStr);
             if (tex && tex->GetRendererID()) {
                 s_MaterialTextures.push_back(tex);
@@ -270,18 +288,26 @@ void DrawSceneHierarchy(Scene& scene, CommandHistory& history) {
         ImGui::Text("Select a model file to instance.");
         ImGui::Separator();
         if (ImGui::MenuItem("Browse Model...")) {
-            nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj"}};
+            nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj,passet"}};
             nfdu8char_t* outPath = nullptr;
             if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
-                std::filesystem::path p(outPath);
+                std::string pathStr(outPath);
+                NFD_FreePathU8(outPath);
+                // External model: import to project first
+                std::string ext = std::filesystem::path(pathStr).extension().string();
+                for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (ext != ".passet") {
+                    std::string passetPath = AssetImporter::ImportModelToProject(pathStr);
+                    if (!passetPath.empty()) pathStr = passetPath;
+                }
+                std::filesystem::path p(pathStr);
                 std::string name = "ISM_" + p.stem().string();
                 auto& obj = scene.AddObject(name, nullptr);
                 SceneInstancedMeshData imd;
-                imd.modelPath = outPath;
+                imd.modelPath = pathStr;
                 obj.instancedMesh = imd;
                 scene.Select(scene.GetObjects().size() - 1);
                 s_InstancedMeshNeedsRebuild = true;
-                NFD_FreePathU8(outPath);
             }
         }
         ImGui::EndPopup();
@@ -538,13 +564,20 @@ void DrawInspector(Scene& scene, CommandHistory& history,
         ImGui::Text("Model: %s", imd.modelPath.empty() ? "(none)" : imd.modelPath.c_str());
         ImGui::SameLine();
         if (ImGui::SmallButton("Change...")) {
-            nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj"}};
+            nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj,passet"}};
             nfdu8char_t* outPath = nullptr;
             if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
-                imd.modelPath = outPath;
+                std::string pathStr(outPath);
+                NFD_FreePathU8(outPath);
+                std::string ext = std::filesystem::path(pathStr).extension().string();
+                for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (ext != ".passet") {
+                    std::string passetPath = AssetImporter::ImportModelToProject(pathStr);
+                    if (!passetPath.empty()) pathStr = passetPath;
+                }
+                imd.modelPath = pathStr;
                 imd.instances.clear();
                 s_InstancedMeshNeedsRebuild = true;
-                NFD_FreePathU8(outPath);
             }
         }
 
@@ -1037,25 +1070,43 @@ bool DrawGizmo(SceneObject& object, const Mat4& view, const Mat4& projection,
 
 // ---- Asset Browser (Icon Grid Layout) ----
 
+// Helper: detect .passet sub-type by reading the file header
+static PAssetType DetectPAssetType(const std::filesystem::path& filepath) {
+    std::ifstream f(filepath, std::ios::binary);
+    if (!f.is_open()) return PAssetType::Texture; // fallback
+    PAssetHeader header;
+    f.read(reinterpret_cast<char*>(&header), sizeof(header));
+    if (!f.good() || header.magic != PASSET_MAGIC) return PAssetType::Texture;
+    return static_cast<PAssetType>(header.type);
+}
+
 // Helper: get file type info
 struct AssetTypeInfo {
     const char* icon;      // Text icon displayed in the card
     ImVec4 color;          // Icon background color
     bool isModel;
+    bool isTexture;
     bool isDirectory;
 };
 
-static AssetTypeInfo GetAssetTypeInfo(const std::string& ext, bool isDir) {
-    if (isDir) return {"DIR", ImVec4(0.35f, 0.35f, 0.55f, 1.0f), false, true};
+static AssetTypeInfo GetAssetTypeInfo(const std::string& ext, bool isDir, const std::filesystem::path& filepath = {}) {
+    if (isDir) return {"DIR", ImVec4(0.35f, 0.35f, 0.55f, 1.0f), false, false, true};
     if (ext == ".glb" || ext == ".gltf" || ext == ".fbx" || ext == ".obj")
-        return {"3D", ImVec4(0.2f, 0.5f, 0.8f, 1.0f), true, false};
+        return {"3D", ImVec4(0.2f, 0.5f, 0.8f, 1.0f), true, false, false};
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr")
-        return {"TEX", ImVec4(0.6f, 0.4f, 0.2f, 1.0f), false, false};
+        return {"TEX", ImVec4(0.6f, 0.4f, 0.2f, 1.0f), false, true, false};
     if (ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp")
-        return {"SHD", ImVec4(0.5f, 0.3f, 0.6f, 1.0f), false, false};
+        return {"SHD", ImVec4(0.5f, 0.3f, 0.6f, 1.0f), false, false, false};
     if (ext == ".pscene")
-        return {"SCN", ImVec4(0.3f, 0.6f, 0.3f, 1.0f), false, false};
-    return {"FILE", ImVec4(0.4f, 0.4f, 0.4f, 1.0f), false, false};
+        return {"SCN", ImVec4(0.3f, 0.6f, 0.3f, 1.0f), false, false, false};
+    if (ext == ".passet") {
+        auto type = DetectPAssetType(filepath);
+        if (type == PAssetType::Model)
+            return {"3D", ImVec4(0.1f, 0.6f, 0.9f, 1.0f), true, false, false};
+        else
+            return {"TEX", ImVec4(0.7f, 0.5f, 0.1f, 1.0f), false, true, false};
+    }
+    return {"FILE", ImVec4(0.4f, 0.4f, 0.4f, 1.0f), false, false, false};
 }
 
 void DrawAssetBrowser(std::string& importPath) {
@@ -1071,6 +1122,33 @@ void DrawAssetBrowser(std::string& importPath) {
         }
         ImGui::SameLine();
     }
+
+    // Import buttons
+    if (ImGui::Button("Import Model...")) {
+        nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj"}};
+        nfdu8char_t* outPath = nullptr;
+        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
+            std::string result = AssetImporter::ImportModelToProject(outPath);
+            if (!result.empty()) {
+                PULUO_CORE_INFO("Imported model to project: {}", result);
+            }
+            NFD_FreePathU8(outPath);
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Import Texture...")) {
+        nfdu8filteritem_t filters[] = {{"Textures", "png,jpg,jpeg,tga,bmp,hdr"}};
+        nfdu8char_t* outPath = nullptr;
+        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
+            std::string result = AssetImporter::ImportTextureToProject(outPath);
+            if (!result.empty()) {
+                PULUO_CORE_INFO("Imported texture to project: {}", result);
+            }
+            NFD_FreePathU8(outPath);
+        }
+    }
+
+    ImGui::SameLine();
     ImGui::Text("Path: %s", currentDir.string().c_str());
     ImGui::Separator();
 
@@ -1124,7 +1202,7 @@ void DrawAssetBrowser(std::string& importPath) {
 
     for (size_t i = 0; i < entries.size(); i++) {
         auto& e = entries[i];
-        auto typeInfo = GetAssetTypeInfo(e.extLower, e.isDir);
+        auto typeInfo = GetAssetTypeInfo(e.extLower, e.isDir, e.path);
 
         int col = static_cast<int>(i) % columns;
         int row = static_cast<int>(i) / columns;
