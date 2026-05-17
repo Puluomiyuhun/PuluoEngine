@@ -194,13 +194,27 @@ void SSAO::Generate(uint32_t depthTexture, const Mat4& projection, uint32_t empt
     glBindVertexArray(emptyVAO);
     glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    // ---- Pass 2: Blur ----
+    // ---- Pass 2: Horizontal bilateral blur ----
     glBindFramebuffer(GL_FRAMEBUFFER, m_BlurFBO);
     glClear(GL_COLOR_BUFFER_BIT);
 
     m_BlurShader->Bind();
     m_BlurShader->SetInt("uSSAOInput", 0);
+    m_BlurShader->SetInt("uDepthTexture", 1);
+    m_BlurShader->SetVec2("uDirection", Vec2(1.0f, 0.0f));
     glBindTextureUnit(0, m_SSAOColorBuffer);
+    glBindTextureUnit(1, depthTexture);
+
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    // ---- Pass 3: Vertical bilateral blur ----
+    glBindFramebuffer(GL_FRAMEBUFFER, m_SSAOFBO);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_BlurShader->SetInt("uSSAOInput", 0);
+    m_BlurShader->SetVec2("uDirection", Vec2(0.0f, 1.0f));
+    glBindTextureUnit(0, m_BlurColorBuffer);
+    // depth still bound to slot 1
 
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
@@ -213,7 +227,7 @@ void SSAO::Generate(uint32_t depthTexture, const Mat4& projection, uint32_t empt
 }
 
 void SSAO::BindTexture(uint32_t slot) const {
-    glBindTextureUnit(slot, m_BlurColorBuffer);
+    glBindTextureUnit(slot, m_SSAOColorBuffer);
 }
 
 } // namespace Puluo

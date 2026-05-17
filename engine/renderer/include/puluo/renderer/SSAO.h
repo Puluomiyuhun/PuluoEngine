@@ -31,7 +31,7 @@ public:
     // Generate SSAO from a depth texture. Uses emptyVAO for fullscreen triangle.
     void Generate(uint32_t depthTexture, const Mat4& projection, uint32_t emptyVAO);
 
-    uint32_t GetBlurredTexture() const { return m_BlurColorBuffer; }
+    uint32_t GetBlurredTexture() const { return m_SSAOColorBuffer; }
     void BindTexture(uint32_t slot) const;
 
     SSAOConfig& GetConfig() { return m_Config; }
