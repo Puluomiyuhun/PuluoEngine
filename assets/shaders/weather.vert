@@ -23,14 +23,9 @@ void main() {
     vec3 worldOffset;
 
     if (uWeatherType == 0) {
-        // Rain: stretch billboard along fall direction
-        vec3 fallDir = normalize(uFallDirection);
-        // Cross product to get perpendicular axis
-        vec3 side = normalize(cross(fallDir, uCameraRight));
-        if (length(side) < 0.001) side = uCameraRight;
-
-        worldOffset = side * aQuadPos.x * uSize
-                    + fallDir * aQuadPos.y * uStreakLength;
+        // Rain: camera-facing billboard, stretched vertically along screen
+        worldOffset = uCameraRight * aQuadPos.x * uSize
+                    + uCameraUp    * aQuadPos.y * uStreakLength;
     } else {
         // Snow: standard camera-aligned billboard
         worldOffset = uCameraRight * aQuadPos.x * uSize
