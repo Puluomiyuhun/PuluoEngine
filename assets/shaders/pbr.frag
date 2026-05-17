@@ -228,6 +228,17 @@ void main() {
         N = normalize(fs_in.Normal);
     }
 
+    // Geometric specular anti-aliasing (Tokuyoshi 2017)
+    // Widens specular lobe where normal varies rapidly across pixels,
+    // preventing sub-pixel highlight flickering in crevices and edges.
+    {
+        vec3 dNdx = dFdx(N);
+        vec3 dNdy = dFdy(N);
+        float variance = dot(dNdx, dNdx) + dot(dNdy, dNdy);
+        float kernelRoughness = min(variance * 0.5, 0.18);
+        roughness = sqrt(roughness * roughness + kernelRoughness);
+    }
+
     vec3 V = normalize(uCamPos - fs_in.FragPos);
 
     // Base reflectivity

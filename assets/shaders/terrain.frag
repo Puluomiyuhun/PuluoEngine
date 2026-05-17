@@ -305,6 +305,15 @@ void main() {
     // Apply normal map
     N = normalize(TBN * normalTS);
 
+    // Geometric specular anti-aliasing
+    {
+        vec3 dNdx = dFdx(N);
+        vec3 dNdy = dFdy(N);
+        float variance = dot(dNdx, dNdx) + dot(dNdy, dNdy);
+        float kernelRoughness = min(variance * 0.5, 0.18);
+        roughness = sqrt(roughness * roughness + kernelRoughness);
+    }
+
     // PBR lighting (GGX specular + Lambert diffuse)
     float NdotL = max(dot(N, L), 0.0);
     vec3 H = normalize(V + L);
