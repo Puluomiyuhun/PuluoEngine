@@ -63,16 +63,25 @@ Texture2D::Texture2D(int width, int height, const void* data)
     m_InternalFormat = GL_RGBA8;
     m_DataFormat = GL_RGBA;
 
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_RendererID);
-    glTextureStorage2D(m_RendererID, 1, m_InternalFormat, m_Width, m_Height);
+    int mipLevels = static_cast<int>(std::floor(std::log2(std::max(m_Width, m_Height)))) + 1;
 
-    glTextureParameteri(m_RendererID, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glCreateTextures(GL_TEXTURE_2D, 1, &m_RendererID);
+    glTextureStorage2D(m_RendererID, mipLevels, m_InternalFormat, m_Width, m_Height);
+
+    glTextureParameteri(m_RendererID, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTextureParameteri(m_RendererID, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTextureParameteri(m_RendererID, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-    if (data)
+    float maxAniso = 0.0f;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso);
+    if (maxAniso > 0.0f)
+        glTextureParameterf(m_RendererID, GL_TEXTURE_MAX_ANISOTROPY, std::min(maxAniso, 16.0f));
+
+    if (data) {
         glTextureSubImage2D(m_RendererID, 0, 0, 0, m_Width, m_Height, m_DataFormat, GL_UNSIGNED_BYTE, data);
+        glGenerateTextureMipmap(m_RendererID);
+    }
 }
 
 Texture2D::~Texture2D() {
@@ -86,6 +95,7 @@ void Texture2D::Bind(uint32_t slot) const {
 
 void Texture2D::SetData(const void* data, uint32_t size) {
     glTextureSubImage2D(m_RendererID, 0, 0, 0, m_Width, m_Height, m_DataFormat, GL_UNSIGNED_BYTE, data);
+    glGenerateTextureMipmap(m_RendererID);
 }
 
 std::shared_ptr<Texture2D> Texture2D::CreateFromMemory(const unsigned char* data, int length) {

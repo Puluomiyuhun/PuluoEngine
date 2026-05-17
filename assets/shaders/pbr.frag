@@ -231,20 +231,26 @@ void main() {
         N = normalize(fs_in.Normal);
     }
 
-    // Geometric specular anti-aliasing (Tokuyoshi 2017)
-    // At distance, sub-pixel triangles cause dFdx/dFdy within a single
-    // triangle to be small even though cross-triangle normal jumps are huge.
-    // Scale the variance cap by distance so far objects get more aggressive AA.
+    // Geometric specular anti-aliasing
+    // Two complementary approaches:
+    // 1) Tokuyoshi: widen specular lobe where normal varies within a quad
+    // 2) Pixel footprint: when a pixel covers a large world area (far/grazing),
+    //    triangles are sub-pixel and cross-triangle normal jumps are invisible
+    //    to dFdx/dFdy — use geometry derivatives as a fallback.
     {
-        float dist = length(uCamPos - fs_in.FragPos);
-        float distFactor = smoothstep(5.0, 80.0, dist);
-        float maxKernel = mix(0.18, 0.6, distFactor);
-
+        // Normal-based (catches normal map variation within a triangle)
         vec3 dNdx = dFdx(N);
         vec3 dNdy = dFdy(N);
-        float variance = dot(dNdx, dNdx) + dot(dNdy, dNdy);
-        float kernelRoughness = min(variance * 0.5, maxKernel);
-        roughness = sqrt(roughness * roughness + kernelRoughness);
+        float normalVariance = dot(dNdx, dNdx) + dot(dNdy, dNdy);
+        float kernelRoughness = min(normalVariance * 0.5, 0.18);
+
+        // Pixel footprint (catches sub-pixel geometry aliasing at distance)
+        vec3 dPdx = dFdx(fs_in.FragPos);
+        vec3 dPdy = dFdy(fs_in.FragPos);
+        float pixelFootprint = max(length(dPdx), length(dPdy));
+        float footprintRoughness = smoothstep(0.02, 0.5, pixelFootprint) * 0.4;
+
+        roughness = sqrt(roughness * roughness + max(kernelRoughness, footprintRoughness));
     }
 
     vec3 V = normalize(uCamPos - fs_in.FragPos);
