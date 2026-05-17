@@ -297,6 +297,7 @@ void ParticleSystem::Render(const CameraController& cameraCtrl) {
 
     // Restore state
     RenderCommand::SetBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    RenderCommand::SetBlending(false);
     RenderCommand::SetDepthWrite(true);
 }
 

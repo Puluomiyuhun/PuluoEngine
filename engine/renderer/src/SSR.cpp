@@ -70,6 +70,7 @@ void SSR::Generate(uint32_t depthTexture, uint32_t sceneColorTexture,
     glGetIntegerv(GL_VIEWPORT, prevViewport);
     GLint prevFBO;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
+    GLboolean prevBlend = glIsEnabled(GL_BLEND);
 
     Mat4 invProjection = glm::inverse(projection);
     Mat4 invView = glm::inverse(view);
@@ -78,6 +79,7 @@ void SSR::Generate(uint32_t depthTexture, uint32_t sceneColorTexture,
     glViewport(0, 0, m_Width, m_Height);
     glClear(GL_COLOR_BUFFER_BIT);
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
 
     m_Shader->Bind();
     m_Shader->SetInt("uDepthTexture", 0);
@@ -102,6 +104,7 @@ void SSR::Generate(uint32_t depthTexture, uint32_t sceneColorTexture,
 
     // Restore state
     glEnable(GL_DEPTH_TEST);
+    if (prevBlend) glEnable(GL_BLEND);
     glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
     glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
 }

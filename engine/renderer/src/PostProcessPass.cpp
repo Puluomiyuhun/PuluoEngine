@@ -39,6 +39,7 @@ void PostProcessPass::Execute(RenderContext& ctx) {
     // ---- FXAA + SSR Composite ----
     ctx.postProcessFB->Bind();
     RenderCommand::SetDepthTest(false);
+    RenderCommand::SetBlending(false);
 
     ctx.fxaaShader->Bind();
     ctx.fxaaShader->SetInt("uScreenTexture", 0);
