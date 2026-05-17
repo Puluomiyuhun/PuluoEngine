@@ -26,6 +26,7 @@ add_library(PuluoRenderer STATIC
     src/SSAOPass.cpp
     src/PostProcessPass.cpp
     src/stb_image_impl.cpp
+    src/stb_image_write_impl.cpp
 )
 
 target_include_directories(PuluoRenderer PUBLIC include)

@@ -48,4 +48,16 @@ bool ConsumeTerrainCreateFlag();
 bool ConsumeTerrainRegenerateFlag();
 std::string ConsumeTerrainHeightmapLoadPath();
 
+// Terrain splat map brush state (read by app for painting)
+struct SplatBrushState {
+    bool enabled = false;
+    int layer = 0;       // 0=Lower, 1=Upper, 2=Slope
+    float radius = 10.0f;
+    float strength = 0.5f;
+    bool eraseMode = false;
+};
+
+SplatBrushState& GetSplatBrushState();
+bool ConsumeSplatGenerateFlag();
+
 } // namespace Puluo

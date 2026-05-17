@@ -55,6 +55,10 @@ uniform float uHeightThreshold; // [0,1] split point for upper/lower
 uniform float uSlopeThreshold;  // slope value above which slope material kicks in
 uniform float uBlendSharpness;  // transition sharpness
 
+// Splat map
+uniform sampler2D uSplatMap;
+uniform bool uUseSplatMap;
+
 uniform float uRoughness; // fallback roughness
 uniform float uMetallic;
 
@@ -235,16 +239,34 @@ void main() {
     float slopeVal = 1.0 - N.y; // 0 = flat, 1 = vertical
 
     // Compute blend weights
-    // Height blend: lower vs upper
-    float halfSharp = uBlendSharpness * 0.5;
-    float heightBlend = smoothstep(uHeightThreshold - 1.0 / halfSharp,
-                                   uHeightThreshold + 1.0 / halfSharp,
-                                   height01);
+    float wLower, wUpper, wSlope;
 
-    // Slope blend: overrides height-based selection
-    float slopeBlend = smoothstep(uSlopeThreshold - 1.0 / halfSharp,
-                                  uSlopeThreshold + 1.0 / halfSharp,
-                                  slopeVal);
+    if (uUseSplatMap) {
+        // Sample splat map: R=Lower, G=Upper, B=Slope
+        vec3 splatWeights = texture(uSplatMap, globalUV).rgb;
+        wLower = splatWeights.r;
+        wUpper = splatWeights.g;
+        wSlope = splatWeights.b;
+        // Normalize in case of precision issues
+        float wSum = wLower + wUpper + wSlope;
+        if (wSum > 0.0) {
+            wLower /= wSum;
+            wUpper /= wSum;
+            wSlope /= wSum;
+        }
+    } else {
+        // Procedural blend: height + slope
+        float halfSharp = uBlendSharpness * 0.5;
+        float heightBlend = smoothstep(uHeightThreshold - 1.0 / halfSharp,
+                                       uHeightThreshold + 1.0 / halfSharp,
+                                       height01);
+        float slopeBlend = smoothstep(uSlopeThreshold - 1.0 / halfSharp,
+                                      uSlopeThreshold + 1.0 / halfSharp,
+                                      slopeVal);
+        wLower = (1.0 - heightBlend) * (1.0 - slopeBlend);
+        wUpper = heightBlend * (1.0 - slopeBlend);
+        wSlope = slopeBlend;
+    }
 
     // Sample three layers
     vec3 fallbackLower = vec3(0.15, 0.28, 0.08); // grass-ish
@@ -269,15 +291,10 @@ void main() {
         uSlopeRoughness, uHasSlopeRoughness,
         fallbackSlope);
 
-    // Blend: first mix lower/upper by height, then override with slope
-    vec3 albedo = mix(lower.albedo, upper.albedo, heightBlend);
-    vec3 normalTS = mix(lower.normal, upper.normal, heightBlend);
-    float roughness = mix(lower.roughness, upper.roughness, heightBlend);
-
-    // Slope override (highest priority)
-    albedo = mix(albedo, slopeLayer.albedo, slopeBlend);
-    normalTS = mix(normalTS, slopeLayer.normal, slopeBlend);
-    roughness = mix(roughness, slopeLayer.roughness, slopeBlend);
+    // Blend: three-way weighted blend using computed weights
+    vec3 albedo = lower.albedo * wLower + upper.albedo * wUpper + slopeLayer.albedo * wSlope;
+    vec3 normalTS = lower.normal * wLower + upper.normal * wUpper + slopeLayer.normal * wSlope;
+    float roughness = lower.roughness * wLower + upper.roughness * wUpper + slopeLayer.roughness * wSlope;
 
     // Apply normal map
     N = normalize(TBN * normalTS);
@@ -389,8 +406,8 @@ void main() {
         FragColor = vec4(sc, 1.0); return;
     }
     if (uDebugMode == 6) {
-        // Visualize layer blend: R=upper, G=lower, B=slope
-        FragColor = vec4(heightBlend, 1.0 - heightBlend, slopeBlend, 1.0); return;
+        // Visualize layer blend: R=lower, G=upper, B=slope
+        FragColor = vec4(wLower, wUpper, wSlope, 1.0); return;
     }
 
     // Tonemap (ACES) + gamma

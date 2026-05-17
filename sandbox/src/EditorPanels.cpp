@@ -36,6 +36,18 @@ static bool s_TerrainNeedsCreate = false;
 static bool s_TerrainNeedsRegenerate = false;
 static std::string s_TerrainHeightmapLoadPath; // non-empty = load requested
 
+// Splat map brush state
+static SplatBrushState s_SplatBrush;
+static bool s_SplatNeedsGenerate = false;
+
+SplatBrushState& GetSplatBrushState() { return s_SplatBrush; }
+
+bool ConsumeSplatGenerateFlag() {
+    bool val = s_SplatNeedsGenerate;
+    s_SplatNeedsGenerate = false;
+    return val;
+}
+
 bool ConsumeTerrainCreateFlag() {
     bool val = s_TerrainNeedsCreate;
     s_TerrainNeedsCreate = false;
@@ -888,6 +900,71 @@ void DrawInspector(Scene& scene, CommandHistory& history,
                 TerrainTexSlotUI("Normal##slope", terrainMaterial.slope.normalTex, terrainMaterial.slope.normalPath);
                 TerrainTexSlotUI("Roughness##slope", terrainMaterial.slope.roughnessTex, terrainMaterial.slope.roughnessPath);
                 ImGui::TreePop();
+            }
+
+            // ---- Splat Map Brush ----
+            ImGui::Separator();
+            ImGui::Text("Splat Map");
+
+            if (terrain.HasSplatMap()) {
+                ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.3f, 1.0f), "Active (%dx%d)",
+                    terrain.GetParams().heightmapRes, terrain.GetParams().heightmapRes);
+            } else {
+                ImGui::TextColored(ImVec4(0.8f, 0.5f, 0.2f, 1.0f), "Not generated (using procedural blend)");
+            }
+
+            if (ImGui::Button("Generate from Rules")) {
+                s_SplatNeedsGenerate = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Save Splat Map...")) {
+                nfdu8char_t* outPath = nullptr;
+                nfdu8filteritem_t filter = { "PNG Image", "png" };
+                nfdu8filteritem_t filters[] = { filter };
+                if (NFD_SaveDialogU8(&outPath, filters, 1, nullptr, "splatmap.png") == NFD_OKAY && outPath) {
+                    terrain.SaveSplatMap(outPath);
+                    NFD_FreePathU8(outPath);
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load Splat Map...")) {
+                nfdu8char_t* outPath = nullptr;
+                nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp" };
+                nfdu8filteritem_t filters[] = { filter };
+                if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
+                    terrain.LoadSplatMap(outPath);
+                    NFD_FreePathU8(outPath);
+                }
+            }
+
+            ImGui::Separator();
+            ImGui::Checkbox("Paint Mode", &s_SplatBrush.enabled);
+            if (s_SplatBrush.enabled) {
+                ImGui::Text("Layer:");
+                ImGui::SameLine();
+                const ImVec4 colLower(0.2f, 0.6f, 0.2f, 1.0f);
+                const ImVec4 colUpper(0.8f, 0.8f, 0.9f, 1.0f);
+                const ImVec4 colSlope(0.5f, 0.45f, 0.4f, 1.0f);
+
+                if (s_SplatBrush.layer == 0) ImGui::PushStyleColor(ImGuiCol_Button, colLower);
+                if (ImGui::Button("Lower")) s_SplatBrush.layer = 0;
+                if (s_SplatBrush.layer == 0) ImGui::PopStyleColor();
+
+                ImGui::SameLine();
+                if (s_SplatBrush.layer == 1) ImGui::PushStyleColor(ImGuiCol_Button, colUpper);
+                if (ImGui::Button("Upper")) s_SplatBrush.layer = 1;
+                if (s_SplatBrush.layer == 1) ImGui::PopStyleColor();
+
+                ImGui::SameLine();
+                if (s_SplatBrush.layer == 2) ImGui::PushStyleColor(ImGuiCol_Button, colSlope);
+                if (ImGui::Button("Slope")) s_SplatBrush.layer = 2;
+                if (s_SplatBrush.layer == 2) ImGui::PopStyleColor();
+
+                ImGui::SliderFloat("Brush Radius", &s_SplatBrush.radius, 1.0f, 50.0f, "%.1f");
+                ImGui::SliderFloat("Brush Strength", &s_SplatBrush.strength, 0.01f, 1.0f, "%.2f");
+                ImGui::Checkbox("Erase Mode", &s_SplatBrush.eraseMode);
+
+                ImGui::TextWrapped("Left-click on terrain in viewport to paint.");
             }
         }
     }

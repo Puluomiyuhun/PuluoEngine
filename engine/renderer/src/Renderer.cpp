@@ -473,6 +473,15 @@ void Renderer::RenderTerrain(const std::shared_ptr<Shader>& terrainShader,
     terrainShader->SetFloat("uSlopeThreshold", material.slopeThreshold);
     terrainShader->SetFloat("uBlendSharpness", material.blendSharpness);
 
+    // Splat map (slot 15)
+    bool useSplatMap = terrain.HasSplatMap();
+    terrainShader->SetInt("uUseSplatMap", useSplatMap ? 1 : 0);
+    if (useSplatMap) {
+        glActiveTexture(GL_TEXTURE15);
+        glBindTexture(GL_TEXTURE_2D, terrain.GetSplatMapTexture());
+        terrainShader->SetInt("uSplatMap", 15);
+    }
+
     terrainShader->SetFloat("uRoughness", 0.85f);
     terrainShader->SetFloat("uMetallic", 0.0f);
 

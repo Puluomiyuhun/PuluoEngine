@@ -858,20 +858,48 @@ public:
         m_ViewportHovered = ImGui::IsItemHovered();
         m_ViewportFocused = ImGui::IsWindowFocused();
 
-        // Mouse picking: left-click in viewport to select object
-        if (m_ViewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)
+        // Mouse picking / splat brush: left-click in viewport
+        auto& splatBrush = Puluo::GetSplatBrushState();
+        bool splatPainting = splatBrush.enabled && m_Terrain.IsCreated() && m_Terrain.HasSplatMap();
+
+        if (m_ViewportHovered
+            && (splatPainting ? ImGui::IsMouseDown(ImGuiMouseButton_Left) : ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing()
             && !Puluo::Input::IsMouseButtonPressed(Puluo::MouseButton::Right)) {
-            ImVec2 mousePos = ImGui::GetMousePos();
-            int mx = static_cast<int>(mousePos.x - vpMin.x);
-            int my = static_cast<int>(vpSize.y - (mousePos.y - vpMin.y)); // Flip Y for OpenGL
-            auto& fbSpec = m_SceneFB->GetSpec();
-            if (mx >= 0 && my >= 0 && mx < static_cast<int>(fbSpec.width) && my < static_cast<int>(fbSpec.height)) {
-                int entityID = m_SceneFB->ReadPixel(1, mx, my);
-                if (entityID >= 0 && entityID < static_cast<int>(m_Scene.GetObjects().size())) {
-                    m_Scene.Select(static_cast<size_t>(entityID));
-                } else {
-                    m_Scene.ClearSelection();
+
+            if (splatPainting) {
+                // Splat brush: raycast against terrain and paint
+                ImVec2 mousePos = ImGui::GetMousePos();
+                float mx = (mousePos.x - vpMin.x) / vpSize.x * 2.0f - 1.0f;
+                float my = 1.0f - (mousePos.y - vpMin.y) / vpSize.y * 2.0f;
+
+                Puluo::Mat4 invVP = glm::inverse(m_Camera.GetViewProjection());
+                Puluo::Vec4 nearClip = invVP * Puluo::Vec4(mx, my, -1.0f, 1.0f);
+                Puluo::Vec4 farClip = invVP * Puluo::Vec4(mx, my, 1.0f, 1.0f);
+                nearClip /= nearClip.w;
+                farClip /= farClip.w;
+
+                Puluo::Vec3 rayOrigin(nearClip);
+                Puluo::Vec3 rayDir = glm::normalize(Puluo::Vec3(farClip) - rayOrigin);
+
+                auto hit = m_Terrain.Raycast(rayOrigin, rayDir);
+                if (hit.hit) {
+                    m_Terrain.PaintSplat(hit.position.x, hit.position.z,
+                        splatBrush.layer, splatBrush.radius, splatBrush.strength, splatBrush.eraseMode);
+                }
+            } else {
+                // Normal entity picking
+                ImVec2 mousePos = ImGui::GetMousePos();
+                int pixX = static_cast<int>(mousePos.x - vpMin.x);
+                int pixY = static_cast<int>(vpSize.y - (mousePos.y - vpMin.y));
+                auto& fbSpec = m_SceneFB->GetSpec();
+                if (pixX >= 0 && pixY >= 0 && pixX < static_cast<int>(fbSpec.width) && pixY < static_cast<int>(fbSpec.height)) {
+                    int entityID = m_SceneFB->ReadPixel(1, pixX, pixY);
+                    if (entityID >= 0 && entityID < static_cast<int>(m_Scene.GetObjects().size())) {
+                        m_Scene.Select(static_cast<size_t>(entityID));
+                    } else {
+                        m_Scene.ClearSelection();
+                    }
                 }
             }
         }
@@ -965,6 +993,14 @@ public:
             if (!hmPath.empty() && m_Terrain.IsCreated()) {
                 m_Terrain.LoadFromImage(hmPath);
             }
+        }
+
+        // Handle splat map generate from rules
+        if (Puluo::ConsumeSplatGenerateFlag() && m_Terrain.IsCreated()) {
+            m_Terrain.GenerateSplatFromRules(
+                m_TerrainMaterial.heightThreshold,
+                m_TerrainMaterial.slopeThreshold,
+                m_TerrainMaterial.blendSharpness);
         }
 
         // If terrain scene object was deleted, destroy runtime terrain
@@ -1137,6 +1173,13 @@ private:
                     td.heightThreshold = m_TerrainMaterial.heightThreshold;
                     td.slopeThreshold = m_TerrainMaterial.slopeThreshold;
                     td.blendSharpness = m_TerrainMaterial.blendSharpness;
+                    // Save splat map if present
+                    if (m_Terrain.HasSplatMap()) {
+                        std::filesystem::path scenePath(outPath);
+                        std::string splatPath = (scenePath.parent_path() / (scenePath.stem().string() + "_splatmap.png")).string();
+                        m_Terrain.SaveSplatMap(splatPath);
+                        td.splatMapPath = splatPath;
+                    }
                     break;
                 }
             }
@@ -1304,6 +1347,10 @@ private:
                     m_TerrainMaterial.heightThreshold = td.heightThreshold;
                     m_TerrainMaterial.slopeThreshold = td.slopeThreshold;
                     m_TerrainMaterial.blendSharpness = td.blendSharpness;
+                    // Load splat map if present
+                    if (!td.splatMapPath.empty() && m_Terrain.IsCreated()) {
+                        m_Terrain.LoadSplatMap(td.splatMapPath);
+                    }
                 } else if (data.water.has_value()) {
                     auto& obj = m_Scene.AddObject(data.name, nullptr);
                     obj.transform = data.transform;

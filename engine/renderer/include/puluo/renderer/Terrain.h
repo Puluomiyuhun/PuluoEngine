@@ -39,6 +39,12 @@ struct TerrainMaterial {
     float blendSharpness  = 8.0f;   // smoothstep transition sharpness
 };
 
+// Terrain raycast hit result
+struct TerrainHit {
+    bool hit = false;
+    Vec3 position{0.0f};
+};
+
 class Terrain {
 public:
     Terrain() = default;
@@ -54,6 +60,18 @@ public:
 
     float GetHeightAt(float worldX, float worldZ) const;
 
+    // Splat map (RGB: R=Lower, G=Upper, B=Slope, each 0-255, R+G+B=255)
+    void GenerateSplatFromRules(float heightThreshold, float slopeThreshold, float blendSharpness);
+    void PaintSplat(float worldX, float worldZ, int layer, float radius, float strength, bool erase = false);
+    void UploadSplatMap();
+    bool SaveSplatMap(const std::string& path) const;
+    bool LoadSplatMap(const std::string& path);
+    bool HasSplatMap() const { return m_SplatMapTex != 0; }
+    uint32_t GetSplatMapTexture() const { return m_SplatMapTex; }
+
+    // Raycast from screen coordinates against terrain heightmap
+    TerrainHit Raycast(const Vec3& rayOrigin, const Vec3& rayDir) const;
+
     uint32_t GetHeightmapTexture() const { return m_HeightmapTex; }
     const std::shared_ptr<VertexArray>& GetPatchVAO() const { return m_PatchVAO; }
     int GetPatchVertexCount() const { return m_PatchVertexCount; }
@@ -66,11 +84,18 @@ private:
     std::vector<float> m_HeightData; // CPU-side heightmap [0,1]
     uint32_t m_HeightmapTex = 0;     // GPU R32F texture
 
+    // Splat map (CPU + GPU)
+    std::vector<unsigned char> m_SplatData; // RGB interleaved, size = res*res*3
+    uint32_t m_SplatMapTex = 0;
+
     std::shared_ptr<VertexArray> m_PatchVAO;
     int m_PatchVertexCount = 0;
 
     void GeneratePatchMesh();
     void UploadHeightmap();
+
+    // Helper: compute slope at a heightmap pixel
+    float ComputeSlopeAt(int px, int py) const;
 };
 
 } // namespace Puluo

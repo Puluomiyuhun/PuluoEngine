@@ -71,6 +71,8 @@ struct SceneTerrainData {
     float heightThreshold = 0.5f;
     float slopeThreshold  = 0.6f;
     float blendSharpness  = 8.0f;
+    // Splat map
+    std::string splatMapPath; // empty = no splat map (use procedural), non-empty = load from PNG
 };
 
 // Water plane data stored in scene (no renderer dependency)
@@ -319,6 +321,7 @@ public:
                 jT["heightThreshold"] = td.heightThreshold;
                 jT["slopeThreshold"] = td.slopeThreshold;
                 jT["blendSharpness"] = td.blendSharpness;
+                jT["splatMapPath"] = td.splatMapPath;
                 // Three-layer material paths
                 jT["lower"] = {{"albedo", td.lower.albedoPath}, {"normal", td.lower.normalPath}, {"roughness", td.lower.roughnessPath}};
                 jT["upper"] = {{"albedo", td.upper.albedoPath}, {"normal", td.upper.normalPath}, {"roughness", td.upper.roughnessPath}};
@@ -502,6 +505,7 @@ public:
                 td.heightThreshold = jT.value("heightThreshold", 0.5f);
                 td.slopeThreshold = jT.value("slopeThreshold", 0.6f);
                 td.blendSharpness = jT.value("blendSharpness", 8.0f);
+                td.splatMapPath = jT.value("splatMapPath", std::string(""));
                 // Three-layer material paths
                 auto readLayer = [](const nlohmann::json& j, SceneTerrainLayerPaths& lp) {
                     lp.albedoPath = j.value("albedo", std::string(""));
