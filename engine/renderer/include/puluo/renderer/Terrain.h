@@ -26,6 +26,7 @@ struct TerrainLayerMaterial {
     std::string albedoPath;
     std::string normalPath;
     std::string roughnessPath;
+    float normalStrength = 1.0f;
 };
 
 struct TerrainMaterial {

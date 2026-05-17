@@ -473,6 +473,11 @@ void Renderer::RenderTerrain(const std::shared_ptr<Shader>& terrainShader,
     terrainShader->SetFloat("uSlopeThreshold", material.slopeThreshold);
     terrainShader->SetFloat("uBlendSharpness", material.blendSharpness);
 
+    // Per-layer normal strength
+    terrainShader->SetFloat("uLowerNormalStrength", material.lower.normalStrength);
+    terrainShader->SetFloat("uUpperNormalStrength", material.upper.normalStrength);
+    terrainShader->SetFloat("uSlopeNormalStrength", material.slope.normalStrength);
+
     // Splat map (slot 15)
     bool useSplatMap = terrain.HasSplatMap();
     terrainShader->SetInt("uUseSplatMap", useSplatMap ? 1 : 0);

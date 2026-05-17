@@ -51,6 +51,7 @@ struct SceneTerrainLayerPaths {
     std::string albedoPath;
     std::string normalPath;
     std::string roughnessPath;
+    float normalStrength = 1.0f;
 };
 
 struct SceneTerrainData {
@@ -323,9 +324,9 @@ public:
                 jT["blendSharpness"] = td.blendSharpness;
                 jT["splatMapPath"] = td.splatMapPath;
                 // Three-layer material paths
-                jT["lower"] = {{"albedo", td.lower.albedoPath}, {"normal", td.lower.normalPath}, {"roughness", td.lower.roughnessPath}};
-                jT["upper"] = {{"albedo", td.upper.albedoPath}, {"normal", td.upper.normalPath}, {"roughness", td.upper.roughnessPath}};
-                jT["slope"] = {{"albedo", td.slope.albedoPath}, {"normal", td.slope.normalPath}, {"roughness", td.slope.roughnessPath}};
+                jT["lower"] = {{"albedo", td.lower.albedoPath}, {"normal", td.lower.normalPath}, {"roughness", td.lower.roughnessPath}, {"normalStrength", td.lower.normalStrength}};
+                jT["upper"] = {{"albedo", td.upper.albedoPath}, {"normal", td.upper.normalPath}, {"roughness", td.upper.roughnessPath}, {"normalStrength", td.upper.normalStrength}};
+                jT["slope"] = {{"albedo", td.slope.albedoPath}, {"normal", td.slope.normalPath}, {"roughness", td.slope.roughnessPath}, {"normalStrength", td.slope.normalStrength}};
                 jObj["terrain"] = jT;
             }
             if (obj.water.has_value()) {
@@ -511,6 +512,7 @@ public:
                     lp.albedoPath = j.value("albedo", std::string(""));
                     lp.normalPath = j.value("normal", std::string(""));
                     lp.roughnessPath = j.value("roughness", std::string(""));
+                    lp.normalStrength = j.value("normalStrength", 1.0f);
                 };
                 if (jT.contains("lower")) readLayer(jT["lower"], td.lower);
                 if (jT.contains("upper")) readLayer(jT["upper"], td.upper);

@@ -55,6 +55,11 @@ uniform float uHeightThreshold; // [0,1] split point for upper/lower
 uniform float uSlopeThreshold;  // slope value above which slope material kicks in
 uniform float uBlendSharpness;  // transition sharpness
 
+// Per-layer normal strength (0 = flat, 1 = full)
+uniform float uLowerNormalStrength;
+uniform float uUpperNormalStrength;
+uniform float uSlopeNormalStrength;
+
 // Splat map
 uniform sampler2D uSplatMap;
 uniform bool uUseSplatMap;
@@ -195,7 +200,7 @@ LayerPBR SampleLayer(vec2 tc,
                      sampler2D albedoTex, bool hasAlbedo,
                      sampler2D normalTex, bool hasNormal,
                      sampler2D roughnessTex, bool hasRoughness,
-                     vec3 fallbackAlbedo) {
+                     vec3 fallbackAlbedo, float normalStrength) {
     LayerPBR layer;
 
     if (hasAlbedo) {
@@ -205,7 +210,8 @@ LayerPBR SampleLayer(vec2 tc,
     }
 
     if (hasNormal) {
-        layer.normal = texture(normalTex, tc).rgb * 2.0 - 1.0;
+        vec3 n = texture(normalTex, tc).rgb * 2.0 - 1.0;
+        layer.normal = vec3(n.xy * normalStrength, n.z);
     } else {
         layer.normal = vec3(0.0, 0.0, 1.0); // tangent-space up
     }
@@ -277,19 +283,19 @@ void main() {
         uLowerAlbedo, uHasLowerAlbedo,
         uLowerNormal, uHasLowerNormal,
         uLowerRoughness, uHasLowerRoughness,
-        fallbackLower);
+        fallbackLower, uLowerNormalStrength);
 
     LayerPBR upper = SampleLayer(texCoord,
         uUpperAlbedo, uHasUpperAlbedo,
         uUpperNormal, uHasUpperNormal,
         uUpperRoughness, uHasUpperRoughness,
-        fallbackUpper);
+        fallbackUpper, uUpperNormalStrength);
 
     LayerPBR slopeLayer = SampleLayer(texCoord,
         uSlopeAlbedo, uHasSlopeAlbedo,
         uSlopeNormal, uHasSlopeNormal,
         uSlopeRoughness, uHasSlopeRoughness,
-        fallbackSlope);
+        fallbackSlope, uSlopeNormalStrength);
 
     // Blend: three-way weighted blend using computed weights
     vec3 albedo = lower.albedo * wLower + upper.albedo * wUpper + slopeLayer.albedo * wSlope;
