@@ -1198,6 +1198,11 @@ void DrawAssetBrowser(std::string& importPath) {
     static std::filesystem::path currentDir = "assets";
     importPath.clear();
 
+    // Rename state
+    static bool renaming = false;
+    static std::filesystem::path renamePath;
+    static char renameBuf[256] = {};
+
     // Navigation bar
     if (currentDir != std::filesystem::path("assets")) {
         if (ImGui::Button("<- Back")) {
@@ -1283,6 +1288,9 @@ void DrawAssetBrowser(std::string& importPath) {
     ImVec2 startPos = ImGui::GetCursorScreenPos();
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
+    // Context menu state
+    static std::filesystem::path contextMenuPath;
+
     for (size_t i = 0; i < entries.size(); i++) {
         auto& e = entries[i];
         auto typeInfo = GetAssetTypeInfo(e.extLower, e.isDir, e.path);
@@ -1300,6 +1308,12 @@ void DrawAssetBrowser(std::string& importPath) {
         bool clicked = ImGui::InvisibleButton("##card", ImVec2(cardWidth, cardHeight));
         bool hovered = ImGui::IsItemHovered();
         bool dblClicked = ImGui::IsMouseDoubleClicked(0) && hovered;
+
+        // Right-click context menu
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && !e.isDir) {
+            contextMenuPath = e.path;
+            ImGui::OpenPopup("AssetContextMenu");
+        }
 
         // Card background
         ImU32 bgColor = hovered
@@ -1321,11 +1335,9 @@ void DrawAssetBrowser(std::string& importPath) {
 
         // Filename below icon (truncated to fit)
         float nameAreaHeight = cardHeight - iconHeight;
-        const char* nameStr = e.name.c_str();
-        ImVec2 nameSize = ImGui::CalcTextSize(nameStr);
+        ImVec2 nameSize = ImGui::CalcTextSize(e.name.c_str());
         float maxTextWidth = cardWidth - 4.0f;
 
-        // Truncate name if too long
         std::string displayName = e.name;
         if (nameSize.x > maxTextWidth) {
             while (displayName.size() > 3) {
@@ -1363,7 +1375,65 @@ void DrawAssetBrowser(std::string& importPath) {
             }
         }
 
+        // Context menu (rendered per item so it stays in PushID scope)
+        if (ImGui::BeginPopup("AssetContextMenu")) {
+            if (contextMenuPath == e.path) {
+                ImGui::Text("%s", e.name.c_str());
+                ImGui::Separator();
+                if (ImGui::MenuItem("Rename")) {
+                    renaming = true;
+                    renamePath = contextMenuPath;
+                    std::string stem = contextMenuPath.stem().string();
+                    snprintf(renameBuf, sizeof(renameBuf), "%s", stem.c_str());
+                }
+                if (ImGui::MenuItem("Delete")) {
+                    std::error_code ec;
+                    std::filesystem::remove(contextMenuPath, ec);
+                    if (ec) {
+                        PULUO_CORE_ERROR("Failed to delete '{}': {}", contextMenuPath.string(), ec.message());
+                    } else {
+                        PULUO_CORE_INFO("Deleted asset: {}", contextMenuPath.string());
+                    }
+                    contextMenuPath.clear();
+                }
+            }
+            ImGui::EndPopup();
+        }
+
         ImGui::PopID();
+    }
+
+    // Rename modal dialog
+    if (renaming) {
+        ImGui::OpenPopup("Rename Asset");
+        renaming = false;
+    }
+    if (ImGui::BeginPopupModal("Rename Asset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Rename: %s", renamePath.filename().string().c_str());
+        ImGui::SetNextItemWidth(250.0f);
+        bool enterPressed = ImGui::InputText("New name", renameBuf, sizeof(renameBuf),
+                                              ImGuiInputTextFlags_EnterReturnsTrue);
+        if (enterPressed || ImGui::Button("OK")) {
+            std::string newName = std::string(renameBuf) + renamePath.extension().string();
+            std::filesystem::path newPath = renamePath.parent_path() / newName;
+            if (newPath != renamePath && !std::filesystem::exists(newPath)) {
+                std::error_code ec;
+                std::filesystem::rename(renamePath, newPath, ec);
+                if (ec) {
+                    PULUO_CORE_ERROR("Failed to rename '{}': {}", renamePath.string(), ec.message());
+                } else {
+                    PULUO_CORE_INFO("Renamed: {} -> {}", renamePath.filename().string(), newName);
+                }
+            }
+            renamePath.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            renamePath.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     // Reserve space so scrolling works
