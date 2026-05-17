@@ -1,0 +1,48 @@
+# Build
+build/
+out/
+cmake-build-*/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.sln
+*.vcxproj*
+CMakeSettings.json
+CMakePresets.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Compiled
+*.exe
+*.dll
+*.lib
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+*.pdb
+
+# Dependencies (fetched by CMake)
+_deps/
+
+# Large asset files (models, HDR, textures)
+assets/models/
+assets/textures/hdr/
+
+# Asset cache (.passet auto-generated)
+assets/cache/
+
+# Substance files
+*.exr
+Substance_graph_output_16bit.png
+
+# Claude Code workspace
+.claude/
+memory/
