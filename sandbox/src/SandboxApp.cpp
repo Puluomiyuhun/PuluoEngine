@@ -1246,6 +1246,36 @@ private:
             env["ssr"]["thickness"] = m_SSRConfig.thickness;
         }
 
+        // SSAO
+        {
+            env["ssao"]["enabled"] = m_SSAOConfig.enabled;
+            env["ssao"]["kernelSize"] = m_SSAOConfig.kernelSize;
+            env["ssao"]["radius"] = m_SSAOConfig.radius;
+            env["ssao"]["bias"] = m_SSAOConfig.bias;
+            env["ssao"]["power"] = m_SSAOConfig.power;
+        }
+
+        // Post-processing
+        {
+            env["postprocess"]["fxaaEnabled"] = m_FXAAEnabled;
+            env["postprocess"]["saturation"] = m_Saturation;
+            env["postprocess"]["contrast"] = m_Contrast;
+        }
+
+        // Weather
+        {
+            auto& w = m_WeatherConfig;
+            env["weather"]["type"] = static_cast<int>(w.type);
+            env["weather"]["intensity"] = w.intensity;
+            env["weather"]["maxParticles"] = w.maxParticles;
+            env["weather"]["areaSize"] = {w.areaSize.x, w.areaSize.y, w.areaSize.z};
+            env["weather"]["fallSpeed"] = w.fallSpeed;
+            env["weather"]["wind"] = {w.wind.x, w.wind.y, w.wind.z};
+            env["weather"]["color"] = {w.color.x, w.color.y, w.color.z, w.color.w};
+            env["weather"]["size"] = w.size;
+            env["weather"]["streakLength"] = w.streakLength;
+        }
+
         // Camera
         {
             auto& pos = m_Camera.GetPosition();
@@ -1490,6 +1520,47 @@ private:
                 m_SSRConfig.maxSteps = s.value("maxSteps", 64);
                 m_SSRConfig.maxDistance = s.value("maxDistance", 50.0f);
                 m_SSRConfig.thickness = s.value("thickness", 0.5f);
+            }
+
+            // SSAO
+            if (env.contains("ssao")) {
+                auto& s = env["ssao"];
+                m_SSAOConfig.enabled = s.value("enabled", true);
+                m_SSAOConfig.kernelSize = s.value("kernelSize", 32u);
+                m_SSAOConfig.radius = s.value("radius", 0.5f);
+                m_SSAOConfig.bias = s.value("bias", 0.025f);
+                m_SSAOConfig.power = s.value("power", 2.0f);
+            }
+
+            // Post-processing
+            if (env.contains("postprocess")) {
+                auto& pp = env["postprocess"];
+                m_FXAAEnabled = pp.value("fxaaEnabled", true);
+                m_Saturation = pp.value("saturation", 1.0f);
+                m_Contrast = pp.value("contrast", 1.0f);
+            }
+
+            // Weather
+            if (env.contains("weather")) {
+                auto& w = env["weather"];
+                m_WeatherConfig.type = static_cast<Puluo::WeatherType>(w.value("type", 0));
+                m_WeatherConfig.intensity = w.value("intensity", 0.5f);
+                m_WeatherConfig.maxParticles = w.value("maxParticles", 30000);
+                if (w.contains("areaSize")) {
+                    auto& a = w["areaSize"];
+                    m_WeatherConfig.areaSize = {a[0].get<float>(), a[1].get<float>(), a[2].get<float>()};
+                }
+                m_WeatherConfig.fallSpeed = w.value("fallSpeed", 12.0f);
+                if (w.contains("wind")) {
+                    auto& wi = w["wind"];
+                    m_WeatherConfig.wind = {wi[0].get<float>(), wi[1].get<float>(), wi[2].get<float>()};
+                }
+                if (w.contains("color")) {
+                    auto& c = w["color"];
+                    m_WeatherConfig.color = {c[0].get<float>(), c[1].get<float>(), c[2].get<float>(), c[3].get<float>()};
+                }
+                m_WeatherConfig.size = w.value("size", 0.05f);
+                m_WeatherConfig.streakLength = w.value("streakLength", 0.4f);
             }
 
             // Terrain (backward compat: old format stored terrain in env)
