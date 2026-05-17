@@ -1555,7 +1555,7 @@ void DrawAssetBrowser(std::string& importPath, std::string& scenePath) {
         bool dblClicked = ImGui::IsMouseDoubleClicked(0) && hovered;
 
         // Right-click context menu
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && !e.isDir) {
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
             contextMenuPath = e.path;
             ImGui::OpenPopup("AssetContextMenu");
         }
@@ -1632,11 +1632,14 @@ void DrawAssetBrowser(std::string& importPath, std::string& scenePath) {
                 }
                 if (ImGui::MenuItem("Delete")) {
                     std::error_code ec;
-                    std::filesystem::remove(contextMenuPath, ec);
+                    if (std::filesystem::is_directory(contextMenuPath))
+                        std::filesystem::remove_all(contextMenuPath, ec);
+                    else
+                        std::filesystem::remove(contextMenuPath, ec);
                     if (ec) {
                         PULUO_CORE_ERROR("Failed to delete '{}': {}", contextMenuPath.string(), ec.message());
                     } else {
-                        PULUO_CORE_INFO("Deleted asset: {}", contextMenuPath.string());
+                        PULUO_CORE_INFO("Deleted: {}", contextMenuPath.string());
                     }
                     contextMenuPath.clear();
                 }
