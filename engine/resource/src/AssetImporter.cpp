@@ -213,6 +213,18 @@ static std::string SanitizeNodeName(const std::string& name) {
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// Helper to write raw bytes
+// ---------------------------------------------------------------------------
+template<typename T>
+static void WriteVal(std::ofstream& f, const T& val) {
+    f.write(reinterpret_cast<const char*>(&val), sizeof(T));
+}
+
+static void WriteBytes(std::ofstream& f, const void* data, size_t size) {
+    f.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
+}
+
 // Write a .passet for a subset of meshes from a scene, applying a world transform
 static std::string WritePAssetForMeshSubset(
     const aiScene* scene,
@@ -380,18 +392,6 @@ static std::string WritePAssetForMeshSubset(
     PULUO_CORE_INFO("AssetImporter: Split export -> '{}' ({} tex, {} mat, {} mesh)",
                     outPath, texCount, matCount, meshCount);
     return outPath;
-}
-
-// ---------------------------------------------------------------------------
-// Helper to write raw bytes
-// ---------------------------------------------------------------------------
-template<typename T>
-static void WriteVal(std::ofstream& f, const T& val) {
-    f.write(reinterpret_cast<const char*>(&val), sizeof(T));
-}
-
-static void WriteBytes(std::ofstream& f, const void* data, size_t size) {
-    f.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
 }
 
 // ---------------------------------------------------------------------------
