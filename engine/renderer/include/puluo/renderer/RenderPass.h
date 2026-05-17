@@ -24,11 +24,14 @@ public:
     virtual void Cleanup(RenderContext& ctx) = 0;
 
     // Convenience: runs Setup -> Execute -> Cleanup
+    // Setup always runs so it can re-evaluate whether the pass should be enabled.
+    // Execute and Cleanup only run if Setup decided to enable the pass.
     void Run(RenderContext& ctx) {
-        if (!m_Enabled) return;
         Setup(ctx);
-        Execute(ctx);
-        Cleanup(ctx);
+        if (m_Enabled) {
+            Execute(ctx);
+            Cleanup(ctx);
+        }
     }
 
     const std::string& GetName() const { return m_Name; }

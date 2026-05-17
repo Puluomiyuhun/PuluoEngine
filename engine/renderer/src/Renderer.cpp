@@ -265,6 +265,7 @@ void Renderer::RenderSkybox(const std::shared_ptr<Shader>& skyboxShader,
     // Render skybox as last (depth test <=, no depth write)
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);  // Skybox cube is viewed from inside
 
     skyboxShader->Bind();
     skyboxShader->SetMat4("uProjection", cameraCtrl.GetProjectionMatrix());
@@ -274,6 +275,7 @@ void Renderer::RenderSkybox(const std::shared_ptr<Shader>& skyboxShader,
 
     s_SkyboxCube.Draw();
 
+    glEnable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS);
 }
@@ -283,6 +285,7 @@ void Renderer::RenderAtmosphere(const std::shared_ptr<Shader>& atmosphereShader,
                                   const AtmosphereParams& params) {
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);  // Atmosphere cube is viewed from inside
 
     atmosphereShader->Bind();
     atmosphereShader->SetMat4("uProjection", cameraCtrl.GetProjectionMatrix());
@@ -310,6 +313,7 @@ void Renderer::RenderAtmosphere(const std::shared_ptr<Shader>& atmosphereShader,
 
     s_SkyboxCube.Draw();
 
+    glEnable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS);
 }
@@ -325,8 +329,9 @@ void Renderer::RenderClouds(const std::shared_ptr<Shader>& cloudShader,
 
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_FALSE);
+    glDisable(GL_CULL_FACE);  // Cloud cube is viewed from inside
     glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  // pre-multiplied alpha 
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);  // pre-multiplied alpha
 
     cloudShader->Bind();
 
@@ -368,6 +373,7 @@ void Renderer::RenderClouds(const std::shared_ptr<Shader>& cloudShader,
     s_SkyboxCube.Draw();
 
     glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS);
 }

@@ -1,6 +1,6 @@
 #version 450 core
 
-layout(quads, fractional_odd_spacing, ccw) in;
+layout(quads, fractional_odd_spacing, cw) in;
 
 in vec2 tcPosition[];
 

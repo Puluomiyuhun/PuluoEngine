@@ -5,6 +5,7 @@
 #include "puluo/renderer/Light.h"
 #include "puluo/renderer/Frustum.h"
 #include <memory>
+#include <unordered_map>
 #include <cstdint>
 
 namespace Puluo {

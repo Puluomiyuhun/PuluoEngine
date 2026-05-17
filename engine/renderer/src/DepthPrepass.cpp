@@ -6,6 +6,8 @@
 #include "puluo/renderer/InstancedMesh.h"
 #include "puluo/renderer/Terrain.h"
 #include "puluo/renderer/Model.h"
+#include "puluo/renderer/SSAO.h"
+#include "puluo/renderer/SSR.h"
 #include "puluo/core/Scene.h"
 
 #include <glad/gl.h>
@@ -18,7 +20,7 @@ void DepthPrepassPass::Setup(RenderContext& ctx) {
                      || (ctx.ssrConfig && ctx.ssrConfig->enabled)
                      || ctx.hasWaterObjects;
     if (!needPrepass || !ctx.depthPrepassFB) {
-        SetEnabled(false);
+        SetEnabled(false); 
         return;
     }
     SetEnabled(true);

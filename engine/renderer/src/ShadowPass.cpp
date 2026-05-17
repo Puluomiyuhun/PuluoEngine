@@ -13,7 +13,11 @@
 namespace Puluo {
 
 void ShadowPass::Setup(RenderContext& ctx) {
-    if (!ctx.csm || !ctx.csm->IsCreated() || !Renderer::s_ShadowEnabled) return;
+    if (!ctx.csm || !ctx.csm->IsCreated() || !Renderer::s_ShadowEnabled) {
+        SetEnabled(false);
+        return;
+    }
+    SetEnabled(true);
 
     // Update cascade splits and light-space matrices
     ctx.csm->Update(*ctx.camera, ctx.shadowLightDir);
@@ -29,7 +33,7 @@ void ShadowPass::Setup(RenderContext& ctx) {
 }
 
 void ShadowPass::Execute(RenderContext& ctx) {
-    if (!ctx.csm || !ctx.csm->IsCreated() || !Renderer::s_ShadowEnabled) return;
+    if (!IsEnabled()) return;
 
     for (uint32_t i = 0; i < ctx.csm->GetCascadeCount(); i++) {
         ctx.csm->BindCascade(i);
@@ -101,7 +105,7 @@ void ShadowPass::Execute(RenderContext& ctx) {
 }
 
 void ShadowPass::Cleanup(RenderContext& ctx) {
-    if (!ctx.csm || !ctx.csm->IsCreated() || !Renderer::s_ShadowEnabled) return;
+    if (!IsEnabled()) return;
 
     RenderCommand::SetPolygonOffset(false);
     RenderCommand::SetCullFace(CullFace::Back);
