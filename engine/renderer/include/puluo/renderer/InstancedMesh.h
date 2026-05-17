@@ -63,9 +63,11 @@ private:
     // CPU-side matrix data (all instances)
     std::vector<Mat4> m_Matrices;
 
-    // Per-instance bounding sphere (world space)
+    // Per-instance world-space AABB (for frustum culling)
+    std::vector<AABB> m_InstanceAABBs;
+
+    // Per-instance bounding sphere center (for distance culling)
     std::vector<Vec3> m_Centers;
-    std::vector<float> m_Radii;
 
     // Compacted visible matrices (reused each frame to avoid alloc)
     std::vector<Mat4> m_CulledMatrices;

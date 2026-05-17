@@ -67,38 +67,28 @@ void InstancedMesh::SetInstances(const std::vector<InstanceTransform>& transform
         m_InstanceVBO->SetData(m_Matrices.data(), m_InstanceCount * sizeof(Mat4));
     }
 
-    // Compute per-instance bounding spheres
+    // Compute per-instance world-space AABBs and centers
+    m_InstanceAABBs.resize(m_InstanceCount);
     m_Centers.resize(m_InstanceCount);
-    m_Radii.resize(m_InstanceCount);
     m_CulledMatrices.resize(m_InstanceCount);
 
     if (m_Model && m_InstanceCount > 0) {
         const auto& localAABB = m_Model->GetBoundingBox();
-        Vec3 localCenter = (localAABB.min + localAABB.max) * 0.5f;
-        float localRadius = glm::length(localAABB.max - localCenter);
 
         for (uint32_t i = 0; i < m_InstanceCount; i++) {
-            // Transform center to world space
+            m_InstanceAABBs[i] = TransformAABB(localAABB, m_Matrices[i]);
+
+            // Center for distance culling
+            Vec3 localCenter = (localAABB.min + localAABB.max) * 0.5f;
             Vec4 wc = m_Matrices[i] * Vec4(localCenter, 1.0f);
             m_Centers[i] = Vec3(wc);
-
-            // Extract max scale from matrix column lengths
-            float sx = glm::length(Vec3(m_Matrices[i][0]));
-            float sy = glm::length(Vec3(m_Matrices[i][1]));
-            float sz = glm::length(Vec3(m_Matrices[i][2]));
-            float maxScale = std::max({sx, sy, sz});
-            m_Radii[i] = localRadius * maxScale;
         }
     }
 
-    // Recompute world AABB
+    // Recompute world AABB (reuse per-instance AABBs already computed above)
     m_WorldAABB = AABB{};
-    if (m_Model && m_InstanceCount > 0) {
-        const auto& localAABB = m_Model->GetBoundingBox();
-        for (uint32_t i = 0; i < m_InstanceCount; i++) {
-            AABB instanceAABB = TransformAABB(localAABB, m_Matrices[i]);
-            m_WorldAABB.Merge(instanceAABB);
-        }
+    for (uint32_t i = 0; i < m_InstanceCount; i++) {
+        m_WorldAABB.Merge(m_InstanceAABBs[i]);
     }
 
     m_VisibleCount = m_InstanceCount;
@@ -109,12 +99,15 @@ void InstancedMesh::CullAndUpload(const Frustum& frustum, const Vec3& camPos, fl
     if (!m_Model || m_InstanceCount == 0) return;
 
     for (uint32_t i = 0; i < m_InstanceCount; i++) {
-        // Distance culling
-        float dist = glm::distance(m_Centers[i], camPos) - m_Radii[i];
-        if (maxDistance > 0.0f && dist > maxDistance) continue;
+        // Distance culling (use closest point on AABB to camera)
+        if (maxDistance > 0.0f) {
+            Vec3 closest = glm::clamp(camPos, m_InstanceAABBs[i].min, m_InstanceAABBs[i].max);
+            float dist = glm::distance(closest, camPos);
+            if (dist > maxDistance) continue;
+        }
 
-        // Frustum culling
-        if (!frustum.TestSphere(m_Centers[i], m_Radii[i])) continue;
+        // Frustum culling (AABB test — tighter than sphere, no false negatives)
+        if (!frustum.TestAABB(m_InstanceAABBs[i])) continue;
 
         m_CulledMatrices[m_VisibleCount++] = m_Matrices[i];
     }
