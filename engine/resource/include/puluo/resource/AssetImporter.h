@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace Puluo {
 
@@ -10,6 +11,11 @@ public:
 
     // 导入模型：外部 .glb/.fbx/.obj → assets/models/xxx.passet
     static std::string ImportModelToProject(
+        const std::string& externalPath,
+        const std::string& destDir = "assets/models");
+
+    // 分件导入：一个 FBX/GLB 的每个顶层子节点 → 独立 .passet
+    static std::vector<std::string> ImportModelSplitToProject(
         const std::string& externalPath,
         const std::string& destDir = "assets/models");
 

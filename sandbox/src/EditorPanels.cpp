@@ -1433,6 +1433,18 @@ void DrawAssetBrowser(std::string& importPath, std::string& scenePath) {
         }
     }
     ImGui::SameLine();
+    if (ImGui::Button("Split Import...")) {
+        nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj"}};
+        nfdu8char_t* outPath = nullptr;
+        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
+            auto results = AssetImporter::ImportModelSplitToProject(outPath, currentDir.string());
+            for (auto& r : results) {
+                PULUO_CORE_INFO("Split imported: {}", r);
+            }
+            NFD_FreePathU8(outPath);
+        }
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Import Texture...")) {
         nfdu8filteritem_t filters[] = {{"Textures", "png,jpg,jpeg,tga,bmp,hdr"}};
         const nfdpathset_t* pathSet = nullptr;
