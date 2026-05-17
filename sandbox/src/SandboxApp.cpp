@@ -396,20 +396,7 @@ public:
         int winH = GetWindow().GetHeight();
         if (winW <= 0 || winH <= 0) return;
 
-        // Sync sun direction to first directional light when using atmosphere
-        // (must happen before shadow pass and light rebuild)
-        if (m_UseAtmosphere) {
-            for (auto& obj : m_Scene.GetObjects()) {
-                if (obj.light.has_value() && obj.light->type == 0) {
-                    Puluo::Vec3 sunDir = m_AtmosphereParams.sunDirection;
-                    Puluo::Vec3 lightForward = -sunDir;
-                    float pitch = glm::degrees(asin(-lightForward.y));
-                    float yaw = glm::degrees(atan2(lightForward.x, lightForward.z));
-                    obj.transform.SetEulerDegrees({pitch, yaw, 0.0f});
-                    break;
-                }
-            }
-        }
+        // (Atmosphere sun is injected as directional light during LightManager rebuild below)
 
         // ---- Per-instance frustum + distance culling (shared by all passes) ----
         Puluo::Frustum frustum = Puluo::Frustum::FromVPMatrix(m_Camera.GetViewProjection());
@@ -498,19 +485,24 @@ public:
                                    std::exp(-BETA_R.z * scale));
             float maxT = glm::max(glm::max(sunTint.x, sunTint.y), sunTint.z);
             if (maxT > 1e-6f) sunTint /= maxT;
+
+            // Inject atmosphere sun as the primary directional light
+            Puluo::Light sunLight;
+            sunLight.type = Puluo::LightType::Directional;
+            sunLight.direction = -m_AtmosphereParams.sunDirection;
+            sunLight.color = sunTint;
+            sunLight.intensity = m_AtmosphereParams.sunIntensity * sunBrightness;
+            m_Lights.AddLight(sunLight);
         }
         for (auto& obj : m_Scene.GetObjects()) {
             if (!obj.light.has_value()) continue;
             auto& ld = obj.light.value();
+            // Skip scene directional lights when atmosphere provides the sun
+            if (m_UseAtmosphere && ld.type == 0) continue;
             Puluo::Light light;
             light.type = static_cast<Puluo::LightType>(ld.type);
             light.color = ld.color;
             light.intensity = ld.intensity;
-            // Modulate directional light by sun elevation in atmosphere mode
-            if (m_UseAtmosphere && ld.type == 0) {
-                light.color = ld.color * sunTint;
-                light.intensity = ld.intensity * sunBrightness;
-            }
             light.position = obj.transform.position;
             light.direction = glm::normalize(obj.transform.orientation * Puluo::Vec3(0.0f, 0.0f, -1.0f));
             light.constant = ld.constant;
