@@ -219,6 +219,9 @@ void main() {
     float roughness = uUseRoughnessMap ? texture(uRoughnessMap, fs_in.TexCoord).g : uRoughness;
     float ao        = uUseAOMap        ? texture(uAOMap, fs_in.TexCoord).r        : uAO;
 
+    // Prevent near-zero roughness (GGX becomes a delta → extreme flicker)
+    roughness = max(roughness, 0.045);
+
     // Normal
     vec3 N;
     if (uUseNormalMap) {
@@ -229,13 +232,18 @@ void main() {
     }
 
     // Geometric specular anti-aliasing (Tokuyoshi 2017)
-    // Widens specular lobe where normal varies rapidly across pixels,
-    // preventing sub-pixel highlight flickering in crevices and edges.
+    // At distance, sub-pixel triangles cause dFdx/dFdy within a single
+    // triangle to be small even though cross-triangle normal jumps are huge.
+    // Scale the variance cap by distance so far objects get more aggressive AA.
     {
+        float dist = length(uCamPos - fs_in.FragPos);
+        float distFactor = smoothstep(5.0, 80.0, dist);
+        float maxKernel = mix(0.18, 0.6, distFactor);
+
         vec3 dNdx = dFdx(N);
         vec3 dNdy = dFdy(N);
         float variance = dot(dNdx, dNdx) + dot(dNdy, dNdy);
-        float kernelRoughness = min(variance * 0.5, 0.18);
+        float kernelRoughness = min(variance * 0.5, maxKernel);
         roughness = sqrt(roughness * roughness + kernelRoughness);
     }
 
