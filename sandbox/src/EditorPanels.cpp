@@ -946,19 +946,23 @@ void DrawInspector(Scene& scene, CommandHistory& history,
                 const ImVec4 colUpper(0.8f, 0.8f, 0.9f, 1.0f);
                 const ImVec4 colSlope(0.5f, 0.45f, 0.4f, 1.0f);
 
-                if (s_SplatBrush.layer == 0) ImGui::PushStyleColor(ImGuiCol_Button, colLower);
+                bool isLower = (s_SplatBrush.layer == 0);
+                bool isUpper = (s_SplatBrush.layer == 1);
+                bool isSlope = (s_SplatBrush.layer == 2);
+
+                if (isLower) ImGui::PushStyleColor(ImGuiCol_Button, colLower);
                 if (ImGui::Button("Lower")) s_SplatBrush.layer = 0;
-                if (s_SplatBrush.layer == 0) ImGui::PopStyleColor();
+                if (isLower) ImGui::PopStyleColor();
 
                 ImGui::SameLine();
-                if (s_SplatBrush.layer == 1) ImGui::PushStyleColor(ImGuiCol_Button, colUpper);
+                if (isUpper) ImGui::PushStyleColor(ImGuiCol_Button, colUpper);
                 if (ImGui::Button("Upper")) s_SplatBrush.layer = 1;
-                if (s_SplatBrush.layer == 1) ImGui::PopStyleColor();
+                if (isUpper) ImGui::PopStyleColor();
 
                 ImGui::SameLine();
-                if (s_SplatBrush.layer == 2) ImGui::PushStyleColor(ImGuiCol_Button, colSlope);
+                if (isSlope) ImGui::PushStyleColor(ImGuiCol_Button, colSlope);
                 if (ImGui::Button("Slope")) s_SplatBrush.layer = 2;
-                if (s_SplatBrush.layer == 2) ImGui::PopStyleColor();
+                if (isSlope) ImGui::PopStyleColor();
 
                 ImGui::SliderFloat("Brush Radius", &s_SplatBrush.radius, 1.0f, 50.0f, "%.1f");
                 ImGui::SliderFloat("Brush Strength", &s_SplatBrush.strength, 0.01f, 1.0f, "%.2f");
