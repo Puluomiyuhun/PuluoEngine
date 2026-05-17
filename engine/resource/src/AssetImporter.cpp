@@ -106,6 +106,62 @@ static bool DecodeTexture(const std::string& ref, const aiScene* scene,
 }
 
 // ---------------------------------------------------------------------------
+// Downscale a decoded texture to fit within maxSize (box filter)
+// ---------------------------------------------------------------------------
+static void DownscaleTexture(DecodedTexture& tex, int maxSize) {
+    if (tex.width <= maxSize && tex.height <= maxSize) return;
+
+    // Compute new size preserving aspect ratio
+    int newW = tex.width, newH = tex.height;
+    if (newW > newH) {
+        newH = newH * maxSize / newW;
+        newW = maxSize;
+    } else {
+        newW = newW * maxSize / newH;
+        newH = maxSize;
+    }
+    newW = std::max(newW, 1);
+    newH = std::max(newH, 1);
+
+    int ch = tex.channels;
+    std::vector<unsigned char> dst(static_cast<size_t>(newW) * newH * ch);
+
+    for (int dy = 0; dy < newH; dy++) {
+        for (int dx = 0; dx < newW; dx++) {
+            // Source region
+            float sx0 = static_cast<float>(dx) * tex.width / newW;
+            float sy0 = static_cast<float>(dy) * tex.height / newH;
+            float sx1 = static_cast<float>(dx + 1) * tex.width / newW;
+            float sy1 = static_cast<float>(dy + 1) * tex.height / newH;
+
+            int ix0 = static_cast<int>(sx0);
+            int iy0 = static_cast<int>(sy0);
+            int ix1 = std::min(static_cast<int>(std::ceil(sx1)), tex.width);
+            int iy1 = std::min(static_cast<int>(std::ceil(sy1)), tex.height);
+
+            // Box filter average
+            for (int c = 0; c < ch; c++) {
+                float sum = 0.0f;
+                int count = 0;
+                for (int sy = iy0; sy < iy1; sy++) {
+                    for (int sx = ix0; sx < ix1; sx++) {
+                        sum += tex.pixels[(sy * tex.width + sx) * ch + c];
+                        count++;
+                    }
+                }
+                dst[(dy * newW + dx) * ch + c] = static_cast<unsigned char>(
+                    std::clamp(sum / std::max(count, 1) + 0.5f, 0.0f, 255.0f));
+            }
+        }
+    }
+
+    PULUO_CORE_INFO("AssetImporter: Downscaled texture {}x{} -> {}x{}", tex.width, tex.height, newW, newH);
+    tex.width = newW;
+    tex.height = newH;
+    tex.pixels = std::move(dst);
+}
+
+// ---------------------------------------------------------------------------
 // Helper to write raw bytes
 // ---------------------------------------------------------------------------
 template<typename T>
@@ -216,6 +272,9 @@ std::string AssetImporter::WriteModelPAsset(const std::string& sourcePath, const
             texRefToIndex[ref] = -1;
             return -1;
         }
+
+        // Limit model textures to 2048x2048 to reduce .passet file size
+        DownscaleTexture(decoded, 2048);
 
         int32_t idx = static_cast<int32_t>(decodedTextures.size());
         decodedTextures.push_back(std::move(decoded));
