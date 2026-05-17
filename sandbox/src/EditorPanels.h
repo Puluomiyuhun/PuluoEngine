@@ -37,7 +37,7 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                  WeatherConfig& weatherConfig);
 bool DrawGizmo(SceneObject& object, const Mat4& view, const Mat4& projection,
                GizmoMode mode, float viewportX, float viewportY, float viewportW, float viewportH);
-void DrawAssetBrowser(std::string& importPath);
+void DrawAssetBrowser(std::string& importPath, std::string& scenePath);
 void DrawStatsOverlay(bool* open, float vpX, float vpY, float vpW, float vpH);
 
 // Instanced mesh rebuild signal (set by editor, consumed by app)

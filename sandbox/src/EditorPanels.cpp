@@ -1144,9 +1144,9 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                 // Apply sensible defaults per type
                 if (newType == WeatherType::Rain) {
                     weatherConfig.fallSpeed = 12.0f;
-                    weatherConfig.size = 0.03f;
-                    weatherConfig.streakLength = 0.4f;
-                    weatherConfig.color = Vec4(0.7f, 0.8f, 0.9f, 0.25f);
+                    weatherConfig.size = 0.08f;
+                    weatherConfig.streakLength = 0.6f;
+                    weatherConfig.color = Vec4(0.7f, 0.8f, 0.9f, 0.4f);
                 } else if (newType == WeatherType::Snow) {
                     weatherConfig.fallSpeed = 1.5f;
                     weatherConfig.size = 0.06f;
@@ -1248,40 +1248,146 @@ static PAssetType DetectPAssetType(const std::filesystem::path& filepath) {
     return static_cast<PAssetType>(header.type);
 }
 
+// ---- Programmatic asset type icons drawn via ImDrawList ----
+
+enum class AssetIcon { Folder, Model3D, Texture, Shader, Scene, File };
+
+static void DrawAssetIcon(ImDrawList* dl, ImVec2 center, float size, AssetIcon icon, ImU32 col) {
+    const float s = size * 0.5f;
+
+    switch (icon) {
+    case AssetIcon::Folder: {
+        float bx = center.x - s, by = center.y - s * 0.55f;
+        float bw = s * 2.0f, bh = s * 1.4f;
+        dl->AddRectFilled(ImVec2(bx, by - s * 0.35f),
+                          ImVec2(bx + bw * 0.4f, by + 1), col, 2.0f, ImDrawFlags_RoundCornersTop);
+        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + bw, by + bh), col, 3.0f);
+        dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + bw, by + 2),
+                          IM_COL32(255, 255, 255, 35), 3.0f, ImDrawFlags_RoundCornersTop);
+        break;
+    }
+    case AssetIcon::Model3D: {
+        float h = s * 0.85f;
+        ImVec2 top(center.x, center.y - h);
+        ImVec2 left(center.x - s, center.y - h * 0.2f);
+        ImVec2 right(center.x + s, center.y - h * 0.2f);
+        ImVec2 bot(center.x, center.y + h * 0.6f);
+        ImVec2 bl(center.x - s, center.y + h * 0.4f);
+        ImVec2 br(center.x + s, center.y + h * 0.4f);
+        ImU32 topCol = IM_COL32((col & 0xFF), ((col >> 8) & 0xFF), ((col >> 16) & 0xFF), 200);
+        ImU32 darkCol = IM_COL32(((col & 0xFF) * 3 / 4), (((col >> 8) & 0xFF) * 3 / 4),
+                                  (((col >> 16) & 0xFF) * 3 / 4), 220);
+        ImVec2 topFace[4] = {top, right, center, left};
+        dl->AddConvexPolyFilled(topFace, 4, topCol);
+        ImVec2 leftFace[4] = {left, center, bot, bl};
+        dl->AddConvexPolyFilled(leftFace, 4, darkCol);
+        ImVec2 rightFace[4] = {center, right, br, bot};
+        dl->AddConvexPolyFilled(rightFace, 4, col);
+        break;
+    }
+    case AssetIcon::Texture: {
+        float rx = center.x - s * 0.8f, ry = center.y - s * 0.7f;
+        float rw = s * 1.6f, rh = s * 1.4f;
+        dl->AddRectFilled(ImVec2(rx, ry), ImVec2(rx + rw, ry + rh), col, 3.0f);
+        float m = 2.0f;
+        dl->AddRectFilled(ImVec2(rx + m, ry + m), ImVec2(rx + rw - m, ry + rh - m),
+                          IM_COL32(255, 255, 255, 60), 2.0f);
+        dl->AddCircleFilled(ImVec2(rx + rw * 0.7f, ry + rh * 0.3f), s * 0.18f,
+                            IM_COL32(255, 220, 100, 200), 8);
+        ImVec2 mt[3] = {
+            ImVec2(rx + rw * 0.15f, ry + rh - m),
+            ImVec2(rx + rw * 0.5f, ry + rh * 0.4f),
+            ImVec2(rx + rw * 0.85f, ry + rh - m)
+        };
+        dl->AddTriangleFilled(mt[0], mt[1], mt[2], IM_COL32(100, 180, 100, 180));
+        break;
+    }
+    case AssetIcon::Shader: {
+        float lx = center.x - s * 0.65f;
+        float rxp = center.x + s * 0.65f;
+        float th = 2.0f;
+        dl->AddLine(ImVec2(lx + s * 0.4f, center.y - s * 0.5f), ImVec2(lx, center.y), col, th);
+        dl->AddLine(ImVec2(lx, center.y), ImVec2(lx + s * 0.4f, center.y + s * 0.5f), col, th);
+        dl->AddLine(ImVec2(rxp - s * 0.4f, center.y - s * 0.5f), ImVec2(rxp, center.y), col, th);
+        dl->AddLine(ImVec2(rxp, center.y), ImVec2(rxp - s * 0.4f, center.y + s * 0.5f), col, th);
+        dl->AddLine(ImVec2(center.x + s * 0.15f, center.y - s * 0.45f),
+                    ImVec2(center.x - s * 0.15f, center.y + s * 0.45f), col, th);
+        break;
+    }
+    case AssetIcon::Scene: {
+        float rx = center.x - s * 0.75f, ry = center.y - s * 0.55f;
+        float rw = s * 1.5f, rh = s * 1.2f;
+        dl->AddRectFilled(ImVec2(rx, ry), ImVec2(rx + rw, ry + rh), col, 3.0f);
+        float barH = rh * 0.25f;
+        ImU32 dark = IM_COL32(((col & 0xFF) * 2 / 3), (((col >> 8) & 0xFF) * 2 / 3),
+                               (((col >> 16) & 0xFF) * 2 / 3), 255);
+        dl->AddRectFilled(ImVec2(rx, ry), ImVec2(rx + rw, ry + barH), dark, 3.0f, ImDrawFlags_RoundCornersTop);
+        for (float sx = rx + rw * 0.15f; sx < rx + rw - 2; sx += rw * 0.2f) {
+            dl->AddLine(ImVec2(sx, ry), ImVec2(sx - 3, ry + barH), IM_COL32(255, 255, 255, 80), 1.5f);
+        }
+        float cx = rx + rw * 0.5f, cy = ry + barH + (rh - barH) * 0.5f;
+        float ts = s * 0.22f;
+        ImVec2 tri[3] = {ImVec2(cx - ts * 0.6f, cy - ts), ImVec2(cx - ts * 0.6f, cy + ts), ImVec2(cx + ts, cy)};
+        dl->AddTriangleFilled(tri[0], tri[1], tri[2], IM_COL32(255, 255, 255, 150));
+        break;
+    }
+    case AssetIcon::File:
+    default: {
+        float rx = center.x - s * 0.55f, ry = center.y - s * 0.7f;
+        float rw = s * 1.1f, rh = s * 1.4f;
+        float fold = s * 0.3f;
+        dl->AddRectFilled(ImVec2(rx, ry), ImVec2(rx + rw, ry + rh), col, 2.0f);
+        ImVec2 foldTri[3] = {ImVec2(rx + rw - fold, ry), ImVec2(rx + rw, ry + fold), ImVec2(rx + rw - fold, ry + fold)};
+        dl->AddTriangleFilled(foldTri[0], foldTri[1], foldTri[2], IM_COL32(0, 0, 0, 40));
+        float lineY = ry + rh * 0.4f;
+        for (int li = 0; li < 3; li++) {
+            float lw = (li == 2) ? rw * 0.45f : rw * 0.65f;
+            dl->AddLine(ImVec2(rx + rw * 0.15f, lineY), ImVec2(rx + rw * 0.15f + lw, lineY),
+                        IM_COL32(255, 255, 255, 80), 1.5f);
+            lineY += rh * 0.15f;
+        }
+        break;
+    }
+    }
+}
+
 // Helper: get file type info
 struct AssetTypeInfo {
-    const char* icon;      // Text icon displayed in the card
+    const char* icon;      // Text label (kept as fallback)
+    AssetIcon   drawIcon;  // Programmatic icon type
     ImVec4 color;          // Icon background color
     bool isModel;
     bool isTexture;
     bool isDirectory;
+    bool isScene;
 };
 
 static AssetTypeInfo GetAssetTypeInfo(const std::string& ext, bool isDir, const std::filesystem::path& filepath = {}) {
-    if (isDir) return {"DIR", ImVec4(0.35f, 0.35f, 0.55f, 1.0f), false, false, true};
+    if (isDir) return {"DIR", AssetIcon::Folder, ImVec4(0.35f, 0.35f, 0.55f, 1.0f), false, false, true, false};
     if (ext == ".glb" || ext == ".gltf" || ext == ".fbx" || ext == ".obj")
-        return {"3D", ImVec4(0.2f, 0.5f, 0.8f, 1.0f), true, false, false};
+        return {"3D", AssetIcon::Model3D, ImVec4(0.2f, 0.5f, 0.8f, 1.0f), true, false, false, false};
     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr")
-        return {"TEX", ImVec4(0.6f, 0.4f, 0.2f, 1.0f), false, true, false};
-    if (ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp")
-        return {"SHD", ImVec4(0.5f, 0.3f, 0.6f, 1.0f), false, false, false};
+        return {"TEX", AssetIcon::Texture, ImVec4(0.6f, 0.4f, 0.2f, 1.0f), false, true, false, false};
+    if (ext == ".vert" || ext == ".frag" || ext == ".glsl" || ext == ".comp" || ext == ".tesc" || ext == ".tese")
+        return {"SHD", AssetIcon::Shader, ImVec4(0.5f, 0.3f, 0.6f, 1.0f), false, false, false, false};
     if (ext == ".pscene")
-        return {"SCN", ImVec4(0.3f, 0.6f, 0.3f, 1.0f), false, false, false};
+        return {"SCN", AssetIcon::Scene, ImVec4(0.3f, 0.6f, 0.3f, 1.0f), false, false, false, true};
     if (ext == ".passet") {
         auto type = DetectPAssetType(filepath);
         if (type == PAssetType::Model)
-            return {"3D", ImVec4(0.1f, 0.6f, 0.9f, 1.0f), true, false, false};
+            return {"3D", AssetIcon::Model3D, ImVec4(0.1f, 0.6f, 0.9f, 1.0f), true, false, false, false};
         else
-            return {"TEX", ImVec4(0.7f, 0.5f, 0.1f, 1.0f), false, true, false};
+            return {"TEX", AssetIcon::Texture, ImVec4(0.7f, 0.5f, 0.1f, 1.0f), false, true, false, false};
     }
-    return {"FILE", ImVec4(0.4f, 0.4f, 0.4f, 1.0f), false, false, false};
+    return {"FILE", AssetIcon::File, ImVec4(0.4f, 0.4f, 0.4f, 1.0f), false, false, false, false};
 }
 
-void DrawAssetBrowser(std::string& importPath) {
+void DrawAssetBrowser(std::string& importPath, std::string& scenePath) {
     ImGui::Begin("Asset Browser");
 
     static std::filesystem::path currentDir = "assets";
     importPath.clear();
+    scenePath.clear();
 
     // Rename state
     static bool renaming = false;
@@ -1335,6 +1441,44 @@ void DrawAssetBrowser(std::string& importPath) {
             }
             NFD_PathSet_Free(pathSet);
         }
+    }
+
+    // New Folder button
+    ImGui::SameLine();
+    static bool creatingFolder = false;
+    static char folderNameBuf[256] = {};
+    if (ImGui::Button("New Folder")) {
+        creatingFolder = true;
+        snprintf(folderNameBuf, sizeof(folderNameBuf), "New Folder");
+        ImGui::OpenPopup("Create Folder");
+    }
+
+    if (ImGui::BeginPopupModal("Create Folder", &creatingFolder, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Folder name:");
+        ImGui::SetNextItemWidth(200);
+        ImGui::InputText("##foldername", folderNameBuf, sizeof(folderNameBuf));
+
+        if (ImGui::Button("Create", ImVec2(100, 0))) {
+            std::string name(folderNameBuf);
+            if (!name.empty()) {
+                std::filesystem::path newDir = currentDir / name;
+                std::error_code ec;
+                std::filesystem::create_directories(newDir, ec);
+                if (ec) {
+                    PULUO_CORE_ERROR("Failed to create folder '{}': {}", newDir.string(), ec.message());
+                } else {
+                    PULUO_CORE_INFO("Created folder: {}", newDir.string());
+                }
+            }
+            creatingFolder = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100, 0))) {
+            creatingFolder = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::SameLine();
@@ -1422,17 +1566,14 @@ void DrawAssetBrowser(std::string& importPath) {
             : IM_COL32(40, 42, 50, 255);
         drawList->AddRectFilled(cardMin, cardMax, bgColor, 4.0f);
 
-        // Icon area
+        // Icon area background
         ImU32 iconColor = ImGui::ColorConvertFloat4ToU32(typeInfo.color);
         drawList->AddRectFilled(cardMin, iconMax, iconColor, 4.0f, ImDrawFlags_RoundCornersTop);
 
-        // Icon text centered in icon area
-        ImVec2 textSize = ImGui::CalcTextSize(typeInfo.icon);
-        ImVec2 textPos = ImVec2(
-            cardMin.x + (cardWidth - textSize.x) * 0.5f,
-            cardMin.y + (iconHeight - textSize.y) * 0.5f
-        );
-        drawList->AddText(textPos, IM_COL32(255, 255, 255, 230), typeInfo.icon);
+        // Draw programmatic icon centered in icon area
+        ImVec2 iconCenter(cardMin.x + cardWidth * 0.5f, cardMin.y + iconHeight * 0.5f);
+        float iconSize = iconHeight * 0.55f;
+        DrawAssetIcon(drawList, iconCenter, iconSize, typeInfo.drawIcon, IM_COL32(255, 255, 255, 220));
 
         // Filename below icon (truncated to fit)
         float nameAreaHeight = cardHeight - iconHeight;
@@ -1473,6 +1614,8 @@ void DrawAssetBrowser(std::string& importPath) {
                 currentDir = e.path;
             } else if (typeInfo.isModel) {
                 importPath = e.path.string();
+            } else if (typeInfo.isScene) {
+                scenePath = e.path.string();
             }
         }
 

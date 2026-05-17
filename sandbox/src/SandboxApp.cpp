@@ -1018,7 +1018,8 @@ public:
 
         // Asset Browser
         std::string browserImportPath;
-        Puluo::DrawAssetBrowser(browserImportPath);
+        std::string browserScenePath;
+        Puluo::DrawAssetBrowser(browserImportPath, browserScenePath);
 
         Puluo::ImGuiLayer::EndFrame();
 
@@ -1035,6 +1036,9 @@ public:
                 if (!passetPath.empty()) browserImportPath = passetPath;
             }
             ImportModelFromPath(browserImportPath);
+        }
+        if (!browserScenePath.empty()) {
+            LoadSceneFromPath(browserScenePath);
         }
     }
 
@@ -1265,295 +1269,298 @@ private:
         }
     }
 
-    void LoadScene() {
-        nfdu8filteritem_t filters[] = {{"Scene Files", "pscene"}};
-        nfdu8char_t* outPath = nullptr;
-        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
-            auto j = Puluo::Scene::LoadJsonFromFile(outPath);
-            if (j.is_null()) {
-                PULUO_CORE_ERROR("Failed to parse scene: {0}", outPath);
-                NFD_FreePathU8(outPath);
-                return;
+    void LoadSceneFromPath(const std::string& path) {
+        auto j = Puluo::Scene::LoadJsonFromFile(path);
+        if (j.is_null()) {
+            PULUO_CORE_ERROR("Failed to parse scene: {0}", path);
+            return;
+        }
+
+        // Rebuild objects
+        auto objectsData = Puluo::Scene::FromJson(j);
+        m_Scene = Puluo::Scene{};
+        m_CommandHistory.Clear();
+        m_InstancedMeshes.clear();
+        m_Terrain.Destroy();
+        m_TerrainMaterial = Puluo::TerrainMaterial{};
+        m_LoadedTerrainTextures.clear();
+        Puluo::TextureCache::Clear();
+        Puluo::ModelCache::Clear();
+        for (auto& data : objectsData) {
+            if (data.light.has_value()) {
+                auto& obj = m_Scene.AddObject(data.name, nullptr);
+                obj.transform = data.transform;
+                obj.light = data.light;
+            } else if (data.particle.has_value()) {
+                auto& obj = m_Scene.AddObject(data.name, nullptr);
+                obj.transform = data.transform;
+                obj.particle = data.particle;
+            } else if (data.instancedMesh.has_value()) {
+                auto& obj = m_Scene.AddObject(data.name, nullptr);
+                obj.transform = data.transform;
+                obj.instancedMesh = data.instancedMesh;
+                size_t objIdx = m_Scene.GetObjects().size() - 1;
+                RebuildInstancedMesh(objIdx);
+            } else if (data.terrain.has_value()) {
+                auto& obj = m_Scene.AddObject(data.name, nullptr);
+                obj.transform = data.transform;
+                obj.terrain = data.terrain;
+                auto& td = obj.terrain.value();
+                // Restore runtime terrain from scene data
+                m_TerrainParams.worldSize = td.worldSize;
+                m_TerrainParams.heightmapRes = td.heightmapRes;
+                m_TerrainParams.patchCount = td.patchCount;
+                m_TerrainParams.heightScale = td.heightScale;
+                m_TerrainParams.uvScale = td.uvScale;
+                m_TerrainMaterial = Puluo::TerrainMaterial{};
+                m_LoadedTerrainTextures.clear();
+                if (td.created) {
+                    m_Terrain.Create(m_TerrainParams);
+                    if (!td.heightmapPath.empty()) {
+                        m_Terrain.LoadFromImage(td.heightmapPath);
+                    } else {
+                        m_Terrain.GenerateFromNoise(td.noiseFreq, td.noiseOctaves);
+                    }
+                }
+                // Load material textures
+                auto loadTexIfPresent = [this](const std::string& path) -> uint32_t {
+                    if (path.empty()) return 0;
+                    auto tex = Puluo::TextureCache::Load(path);
+                    if (tex && tex->GetRendererID()) {
+                        m_LoadedTerrainTextures.push_back(tex);
+                        return tex->GetRendererID();
+                    }
+                    PULUO_CORE_WARN("Failed to load terrain texture: {0}", path);
+                    return 0;
+                };
+                auto loadLayer = [&](Puluo::TerrainLayerMaterial& dst, const Puluo::SceneTerrainLayerPaths& src) {
+                    dst.albedoPath = src.albedoPath;
+                    dst.normalPath = src.normalPath;
+                    dst.roughnessPath = src.roughnessPath;
+                    dst.albedoTex = loadTexIfPresent(dst.albedoPath);
+                    dst.normalTex = loadTexIfPresent(dst.normalPath);
+                    dst.roughnessTex = loadTexIfPresent(dst.roughnessPath);
+                };
+                loadLayer(m_TerrainMaterial.lower, td.lower);
+                loadLayer(m_TerrainMaterial.upper, td.upper);
+                loadLayer(m_TerrainMaterial.slope, td.slope);
+                m_TerrainMaterial.heightThreshold = td.heightThreshold;
+                m_TerrainMaterial.slopeThreshold = td.slopeThreshold;
+                m_TerrainMaterial.blendSharpness = td.blendSharpness;
+                // Load splat map if present
+                if (!td.splatMapPath.empty() && m_Terrain.IsCreated()) {
+                    m_Terrain.LoadSplatMap(td.splatMapPath);
+                }
+            } else if (data.water.has_value()) {
+                auto& obj = m_Scene.AddObject(data.name, nullptr);
+                obj.transform = data.transform;
+                obj.water = data.water;
+            } else if (!data.modelPath.empty()) {
+                auto model = Puluo::ModelCache::Load(data.modelPath);
+                if (model) {
+                    auto& obj = m_Scene.AddObject(data.name, model);
+                    obj.modelPath = data.modelPath;
+                    obj.transform = data.transform;
+                    // Apply material overrides
+                    if (!data.materialOverrides.empty()) {
+                        obj.materialOverrides = data.materialOverrides;
+                        auto& materials = model->GetMutableMaterials();
+                        for (auto& [slot, ovr] : obj.materialOverrides) {
+                            if (slot < 0 || slot >= static_cast<int>(materials.size())) continue;
+                            auto& mat = materials[slot];
+                            mat.albedo = ovr.albedo;
+                            mat.metallic = ovr.metallic;
+                            mat.roughness = ovr.roughness;
+                            mat.ao = ovr.ao;
+                            mat.alphaCutoff = ovr.alphaCutoff;
+                            mat.useAlphaMask = ovr.useAlphaMask;
+                            mat.useSSS = ovr.useSSS;
+                            mat.sssColor = ovr.sssColor;
+                            mat.sssStrength = ovr.sssStrength;
+                            if (!ovr.albedoMapPath.empty())
+                                mat.albedoMap = Puluo::TextureCache::Load(ovr.albedoMapPath);
+                            if (!ovr.normalMapPath.empty())
+                                mat.normalMap = Puluo::TextureCache::Load(ovr.normalMapPath);
+                            if (!ovr.metallicMapPath.empty())
+                                mat.metallicMap = Puluo::TextureCache::Load(ovr.metallicMapPath);
+                            if (!ovr.roughnessMapPath.empty())
+                                mat.roughnessMap = Puluo::TextureCache::Load(ovr.roughnessMapPath);
+                            if (!ovr.aoMapPath.empty())
+                                mat.aoMap = Puluo::TextureCache::Load(ovr.aoMapPath);
+                            if (!ovr.maskMapPath.empty())
+                                mat.maskMap = Puluo::TextureCache::Load(ovr.maskMapPath);
+                        }
+                    }
+                } else {
+                    PULUO_CORE_WARN("Failed to load model for '{0}': {1}", data.name, data.modelPath);
+                }
+            }
+        }
+
+        // Load environment (v2+, optional for backward compat)
+        if (j.contains("environment")) {
+            auto& env = j["environment"];
+
+            // Atmosphere
+            if (env.contains("atmosphere")) {
+                auto& a = env["atmosphere"];
+                m_UseAtmosphere = a.value("enabled", false);
+                if (a.contains("sunDirection")) {
+                    auto& sd = a["sunDirection"];
+                    m_AtmosphereParams.sunDirection = {sd[0].get<float>(), sd[1].get<float>(), sd[2].get<float>()};
+                }
+                m_AtmosphereParams.sunIntensity = a.value("sunIntensity", 22.0f);
+                m_AtmosphereParams.turbidity = a.value("turbidity", 1.5f);
+                if (a.contains("rayleighCoeff")) {
+                    auto& rc = a["rayleighCoeff"];
+                    m_AtmosphereParams.rayleighCoeff = {rc[0].get<float>(), rc[1].get<float>(), rc[2].get<float>()};
+                }
+                m_AtmosphereParams.mieCoeff = a.value("mieCoeff", 21e-6f);
+                m_AtmosphereParams.mieDirectionG = a.value("mieDirectionG", 0.93f);
             }
 
-            // Rebuild objects
-            auto objectsData = Puluo::Scene::FromJson(j);
-            m_Scene = Puluo::Scene{};
-            m_CommandHistory.Clear();
-            m_InstancedMeshes.clear();
-            m_Terrain.Destroy();
-            m_TerrainMaterial = Puluo::TerrainMaterial{};
-            m_LoadedTerrainTextures.clear();
-            Puluo::TextureCache::Clear();
-            Puluo::ModelCache::Clear();
-            for (auto& data : objectsData) {
-                if (data.light.has_value()) {
-                    auto& obj = m_Scene.AddObject(data.name, nullptr);
-                    obj.transform = data.transform;
-                    obj.light = data.light;
-                } else if (data.particle.has_value()) {
-                    auto& obj = m_Scene.AddObject(data.name, nullptr);
-                    obj.transform = data.transform;
-                    obj.particle = data.particle;
-                } else if (data.instancedMesh.has_value()) {
-                    auto& obj = m_Scene.AddObject(data.name, nullptr);
-                    obj.transform = data.transform;
-                    obj.instancedMesh = data.instancedMesh;
-                    size_t objIdx = m_Scene.GetObjects().size() - 1;
-                    RebuildInstancedMesh(objIdx);
-                } else if (data.terrain.has_value()) {
-                    auto& obj = m_Scene.AddObject(data.name, nullptr);
-                    obj.transform = data.transform;
-                    obj.terrain = data.terrain;
-                    auto& td = obj.terrain.value();
-                    // Restore runtime terrain from scene data
+            // Fog
+            if (env.contains("fog")) {
+                auto& f = env["fog"];
+                m_FogParams.enabled = f.value("enabled", false);
+                m_FogParams.density = f.value("density", 0.02f);
+                m_FogParams.heightFalloff = f.value("heightFalloff", 0.2f);
+                m_FogParams.maxOpacity = f.value("maxOpacity", 1.0f);
+                if (f.contains("fogColor")) {
+                    auto& fc = f["fogColor"];
+                    m_FogParams.fogColor = {fc[0].get<float>(), fc[1].get<float>(), fc[2].get<float>()};
+                }
+                m_FogParams.startDistance = f.value("startDistance", 10.0f);
+                if (f.contains("dirInscatterColor")) {
+                    auto& dc = f["dirInscatterColor"];
+                    m_FogParams.directionalInscatteringColor = {dc[0].get<float>(), dc[1].get<float>(), dc[2].get<float>()};
+                }
+                m_FogParams.directionalInscatteringExponent = f.value("dirInscatterExp", 4.0f);
+                m_FogParams.directionalInscatteringStartDistance = f.value("dirInscatterStartDist", 20.0f);
+            }
+
+            // Cloud
+            if (env.contains("cloud")) {
+                auto& c = env["cloud"];
+                m_CloudParams.enabled = c.value("enabled", false);
+                m_CloudParams.cloudLayerBottom = c.value("layerBottom", 4000.0f);
+                m_CloudParams.cloudLayerThickness = c.value("layerThickness", 4500.0f);
+                m_CloudParams.coverage = c.value("coverage", 0.5f);
+                m_CloudParams.density = c.value("density", 0.001f);
+                m_CloudParams.detailScale = c.value("detailScale", 0.001f);
+                m_CloudParams.baseScale = c.value("baseScale", 0.00008f);
+                m_CloudParams.windSpeed = c.value("windSpeed", 5.0f);
+                if (c.contains("windDirection")) {
+                    auto& wd = c["windDirection"];
+                    m_CloudParams.windDirection = {wd[0].get<float>(), wd[1].get<float>(), wd[2].get<float>()};
+                }
+                m_CloudParams.phaseG = c.value("phaseG", 0.35f);
+                m_CloudParams.powderStrength = c.value("powderStrength", 2.0f);
+                if (c.contains("ambientColor")) {
+                    auto& ac = c["ambientColor"];
+                    m_CloudParams.ambientColor = {ac[0].get<float>(), ac[1].get<float>(), ac[2].get<float>()};
+                }
+                m_CloudParams.ambientStrength = c.value("ambientStrength", 0.15f);
+            }
+
+            // SSR
+            if (env.contains("ssr")) {
+                auto& s = env["ssr"];
+                m_SSRConfig.enabled = s.value("enabled", false);
+                m_SSRConfig.maxSteps = s.value("maxSteps", 64);
+                m_SSRConfig.maxDistance = s.value("maxDistance", 50.0f);
+                m_SSRConfig.thickness = s.value("thickness", 0.5f);
+            }
+
+            // Terrain (backward compat: old format stored terrain in env)
+            if (env.contains("terrain")) {
+                // Check if terrain scene object was already loaded
+                bool hasTerrainObj = false;
+                for (auto& obj : m_Scene.GetObjects()) {
+                    if (obj.terrain.has_value()) { hasTerrainObj = true; break; }
+                }
+                if (!hasTerrainObj) {
+                    auto& t = env["terrain"];
+                    bool wasCreated = t.value("created", false);
+                    Puluo::SceneTerrainData td;
+                    td.worldSize = t.value("worldSize", 500.0f);
+                    td.heightmapRes = t.value("heightmapRes", 257);
+                    td.patchCount = t.value("patchCount", 64);
+                    td.heightScale = t.value("heightScale", 80.0f);
+                    td.uvScale = t.value("uvScale", 50.0f);
+                    td.created = wasCreated;
+
                     m_TerrainParams.worldSize = td.worldSize;
                     m_TerrainParams.heightmapRes = td.heightmapRes;
                     m_TerrainParams.patchCount = td.patchCount;
                     m_TerrainParams.heightScale = td.heightScale;
                     m_TerrainParams.uvScale = td.uvScale;
+
+                    if (wasCreated) {
+                        m_Terrain.Create(m_TerrainParams);
+                        m_Terrain.GenerateFromNoise();
+                    }
+
+                    // Material texture paths (backward compat: old single material → lower layer)
                     m_TerrainMaterial = Puluo::TerrainMaterial{};
                     m_LoadedTerrainTextures.clear();
-                    if (td.created) {
-                        m_Terrain.Create(m_TerrainParams);
-                        if (!td.heightmapPath.empty()) {
-                            m_Terrain.LoadFromImage(td.heightmapPath);
-                        } else {
-                            m_Terrain.GenerateFromNoise(td.noiseFreq, td.noiseOctaves);
-                        }
-                    }
-                    // Load material textures
-                    auto loadTexIfPresent = [this](const std::string& path) -> uint32_t {
-                        if (path.empty()) return 0;
-                        auto tex = Puluo::TextureCache::Load(path);
-                        if (tex && tex->GetRendererID()) {
-                            m_LoadedTerrainTextures.push_back(tex);
-                            return tex->GetRendererID();
-                        }
-                        PULUO_CORE_WARN("Failed to load terrain texture: {0}", path);
-                        return 0;
-                    };
-                    auto loadLayer = [&](Puluo::TerrainLayerMaterial& dst, const Puluo::SceneTerrainLayerPaths& src) {
-                        dst.albedoPath = src.albedoPath;
-                        dst.normalPath = src.normalPath;
-                        dst.roughnessPath = src.roughnessPath;
-                        dst.albedoTex = loadTexIfPresent(dst.albedoPath);
-                        dst.normalTex = loadTexIfPresent(dst.normalPath);
-                        dst.roughnessTex = loadTexIfPresent(dst.roughnessPath);
-                    };
-                    loadLayer(m_TerrainMaterial.lower, td.lower);
-                    loadLayer(m_TerrainMaterial.upper, td.upper);
-                    loadLayer(m_TerrainMaterial.slope, td.slope);
-                    m_TerrainMaterial.heightThreshold = td.heightThreshold;
-                    m_TerrainMaterial.slopeThreshold = td.slopeThreshold;
-                    m_TerrainMaterial.blendSharpness = td.blendSharpness;
-                    // Load splat map if present
-                    if (!td.splatMapPath.empty() && m_Terrain.IsCreated()) {
-                        m_Terrain.LoadSplatMap(td.splatMapPath);
-                    }
-                } else if (data.water.has_value()) {
-                    auto& obj = m_Scene.AddObject(data.name, nullptr);
-                    obj.transform = data.transform;
-                    obj.water = data.water;
-                } else if (!data.modelPath.empty()) {
-                    auto model = Puluo::ModelCache::Load(data.modelPath);
-                    if (model) {
-                        auto& obj = m_Scene.AddObject(data.name, model);
-                        obj.modelPath = data.modelPath;
-                        obj.transform = data.transform;
-                        // Apply material overrides
-                        if (!data.materialOverrides.empty()) {
-                            obj.materialOverrides = data.materialOverrides;
-                            auto& materials = model->GetMutableMaterials();
-                            for (auto& [slot, ovr] : obj.materialOverrides) {
-                                if (slot < 0 || slot >= static_cast<int>(materials.size())) continue;
-                                auto& mat = materials[slot];
-                                mat.albedo = ovr.albedo;
-                                mat.metallic = ovr.metallic;
-                                mat.roughness = ovr.roughness;
-                                mat.ao = ovr.ao;
-                                mat.alphaCutoff = ovr.alphaCutoff;
-                                mat.useAlphaMask = ovr.useAlphaMask;
-                                mat.useSSS = ovr.useSSS;
-                                mat.sssColor = ovr.sssColor;
-                                mat.sssStrength = ovr.sssStrength;
-                                if (!ovr.albedoMapPath.empty())
-                                    mat.albedoMap = Puluo::TextureCache::Load(ovr.albedoMapPath);
-                                if (!ovr.normalMapPath.empty())
-                                    mat.normalMap = Puluo::TextureCache::Load(ovr.normalMapPath);
-                                if (!ovr.metallicMapPath.empty())
-                                    mat.metallicMap = Puluo::TextureCache::Load(ovr.metallicMapPath);
-                                if (!ovr.roughnessMapPath.empty())
-                                    mat.roughnessMap = Puluo::TextureCache::Load(ovr.roughnessMapPath);
-                                if (!ovr.aoMapPath.empty())
-                                    mat.aoMap = Puluo::TextureCache::Load(ovr.aoMapPath);
-                                if (!ovr.maskMapPath.empty())
-                                    mat.maskMap = Puluo::TextureCache::Load(ovr.maskMapPath);
+                    if (t.contains("material")) {
+                        auto& mat = t["material"];
+                        auto loadTexIfPresent = [this](const std::string& path) -> uint32_t {
+                            if (path.empty()) return 0;
+                            auto tex = Puluo::TextureCache::Load(path);
+                            if (tex && tex->GetRendererID()) {
+                                m_LoadedTerrainTextures.push_back(tex);
+                                return tex->GetRendererID();
                             }
-                        }
-                    } else {
-                        PULUO_CORE_WARN("Failed to load model for '{0}': {1}", data.name, data.modelPath);
+                            PULUO_CORE_WARN("Failed to load terrain texture: {0}", path);
+                            return 0;
+                        };
+                        // Old format only had one set → put into lower layer
+                        m_TerrainMaterial.lower.albedoPath = mat.value("albedoPath", "");
+                        m_TerrainMaterial.lower.normalPath = mat.value("normalPath", "");
+                        m_TerrainMaterial.lower.roughnessPath = mat.value("roughnessPath", "");
+                        td.lower.albedoPath = m_TerrainMaterial.lower.albedoPath;
+                        td.lower.normalPath = m_TerrainMaterial.lower.normalPath;
+                        td.lower.roughnessPath = m_TerrainMaterial.lower.roughnessPath;
+                        m_TerrainMaterial.lower.albedoTex = loadTexIfPresent(m_TerrainMaterial.lower.albedoPath);
+                        m_TerrainMaterial.lower.normalTex = loadTexIfPresent(m_TerrainMaterial.lower.normalPath);
+                        m_TerrainMaterial.lower.roughnessTex = loadTexIfPresent(m_TerrainMaterial.lower.roughnessPath);
                     }
+
+                    // Create terrain scene object for new format
+                    auto& terrainObj = m_Scene.AddObject("Terrain", nullptr);
+                    terrainObj.terrain = td;
                 }
             }
 
-            // Load environment (v2+, optional for backward compat)
-            if (j.contains("environment")) {
-                auto& env = j["environment"];
-
-                // Atmosphere
-                if (env.contains("atmosphere")) {
-                    auto& a = env["atmosphere"];
-                    m_UseAtmosphere = a.value("enabled", false);
-                    if (a.contains("sunDirection")) {
-                        auto& sd = a["sunDirection"];
-                        m_AtmosphereParams.sunDirection = {sd[0].get<float>(), sd[1].get<float>(), sd[2].get<float>()};
-                    }
-                    m_AtmosphereParams.sunIntensity = a.value("sunIntensity", 22.0f);
-                    m_AtmosphereParams.turbidity = a.value("turbidity", 1.5f);
-                    if (a.contains("rayleighCoeff")) {
-                        auto& rc = a["rayleighCoeff"];
-                        m_AtmosphereParams.rayleighCoeff = {rc[0].get<float>(), rc[1].get<float>(), rc[2].get<float>()};
-                    }
-                    m_AtmosphereParams.mieCoeff = a.value("mieCoeff", 21e-6f);
-                    m_AtmosphereParams.mieDirectionG = a.value("mieDirectionG", 0.93f);
+            // Camera
+            if (env.contains("camera")) {
+                auto& cam = env["camera"];
+                Puluo::Vec3 pos{0.0f, 1.0f, 5.0f};
+                if (cam.contains("position")) {
+                    auto& p = cam["position"];
+                    pos = {p[0].get<float>(), p[1].get<float>(), p[2].get<float>()};
                 }
-
-                // Fog
-                if (env.contains("fog")) {
-                    auto& f = env["fog"];
-                    m_FogParams.enabled = f.value("enabled", false);
-                    m_FogParams.density = f.value("density", 0.02f);
-                    m_FogParams.heightFalloff = f.value("heightFalloff", 0.2f);
-                    m_FogParams.maxOpacity = f.value("maxOpacity", 1.0f);
-                    if (f.contains("fogColor")) {
-                        auto& fc = f["fogColor"];
-                        m_FogParams.fogColor = {fc[0].get<float>(), fc[1].get<float>(), fc[2].get<float>()};
-                    }
-                    m_FogParams.startDistance = f.value("startDistance", 10.0f);
-                    if (f.contains("dirInscatterColor")) {
-                        auto& dc = f["dirInscatterColor"];
-                        m_FogParams.directionalInscatteringColor = {dc[0].get<float>(), dc[1].get<float>(), dc[2].get<float>()};
-                    }
-                    m_FogParams.directionalInscatteringExponent = f.value("dirInscatterExp", 4.0f);
-                    m_FogParams.directionalInscatteringStartDistance = f.value("dirInscatterStartDist", 20.0f);
-                }
-
-                // Cloud
-                if (env.contains("cloud")) {
-                    auto& c = env["cloud"];
-                    m_CloudParams.enabled = c.value("enabled", false);
-                    m_CloudParams.cloudLayerBottom = c.value("layerBottom", 4000.0f);
-                    m_CloudParams.cloudLayerThickness = c.value("layerThickness", 4500.0f);
-                    m_CloudParams.coverage = c.value("coverage", 0.5f);
-                    m_CloudParams.density = c.value("density", 0.001f);
-                    m_CloudParams.detailScale = c.value("detailScale", 0.001f);
-                    m_CloudParams.baseScale = c.value("baseScale", 0.00008f);
-                    m_CloudParams.windSpeed = c.value("windSpeed", 5.0f);
-                    if (c.contains("windDirection")) {
-                        auto& wd = c["windDirection"];
-                        m_CloudParams.windDirection = {wd[0].get<float>(), wd[1].get<float>(), wd[2].get<float>()};
-                    }
-                    m_CloudParams.phaseG = c.value("phaseG", 0.35f);
-                    m_CloudParams.powderStrength = c.value("powderStrength", 2.0f);
-                    if (c.contains("ambientColor")) {
-                        auto& ac = c["ambientColor"];
-                        m_CloudParams.ambientColor = {ac[0].get<float>(), ac[1].get<float>(), ac[2].get<float>()};
-                    }
-                    m_CloudParams.ambientStrength = c.value("ambientStrength", 0.15f);
-                }
-
-                // SSR
-                if (env.contains("ssr")) {
-                    auto& s = env["ssr"];
-                    m_SSRConfig.enabled = s.value("enabled", false);
-                    m_SSRConfig.maxSteps = s.value("maxSteps", 64);
-                    m_SSRConfig.maxDistance = s.value("maxDistance", 50.0f);
-                    m_SSRConfig.thickness = s.value("thickness", 0.5f);
-                }
-
-                // Terrain (backward compat: old format stored terrain in env)
-                if (env.contains("terrain")) {
-                    // Check if terrain scene object was already loaded
-                    bool hasTerrainObj = false;
-                    for (auto& obj : m_Scene.GetObjects()) {
-                        if (obj.terrain.has_value()) { hasTerrainObj = true; break; }
-                    }
-                    if (!hasTerrainObj) {
-                        auto& t = env["terrain"];
-                        bool wasCreated = t.value("created", false);
-                        Puluo::SceneTerrainData td;
-                        td.worldSize = t.value("worldSize", 500.0f);
-                        td.heightmapRes = t.value("heightmapRes", 257);
-                        td.patchCount = t.value("patchCount", 64);
-                        td.heightScale = t.value("heightScale", 80.0f);
-                        td.uvScale = t.value("uvScale", 50.0f);
-                        td.created = wasCreated;
-
-                        m_TerrainParams.worldSize = td.worldSize;
-                        m_TerrainParams.heightmapRes = td.heightmapRes;
-                        m_TerrainParams.patchCount = td.patchCount;
-                        m_TerrainParams.heightScale = td.heightScale;
-                        m_TerrainParams.uvScale = td.uvScale;
-
-                        if (wasCreated) {
-                            m_Terrain.Create(m_TerrainParams);
-                            m_Terrain.GenerateFromNoise();
-                        }
-
-                        // Material texture paths (backward compat: old single material → lower layer)
-                        m_TerrainMaterial = Puluo::TerrainMaterial{};
-                        m_LoadedTerrainTextures.clear();
-                        if (t.contains("material")) {
-                            auto& mat = t["material"];
-                            auto loadTexIfPresent = [this](const std::string& path) -> uint32_t {
-                                if (path.empty()) return 0;
-                                auto tex = Puluo::TextureCache::Load(path);
-                                if (tex && tex->GetRendererID()) {
-                                    m_LoadedTerrainTextures.push_back(tex);
-                                    return tex->GetRendererID();
-                                }
-                                PULUO_CORE_WARN("Failed to load terrain texture: {0}", path);
-                                return 0;
-                            };
-                            // Old format only had one set → put into lower layer
-                            m_TerrainMaterial.lower.albedoPath = mat.value("albedoPath", "");
-                            m_TerrainMaterial.lower.normalPath = mat.value("normalPath", "");
-                            m_TerrainMaterial.lower.roughnessPath = mat.value("roughnessPath", "");
-                            td.lower.albedoPath = m_TerrainMaterial.lower.albedoPath;
-                            td.lower.normalPath = m_TerrainMaterial.lower.normalPath;
-                            td.lower.roughnessPath = m_TerrainMaterial.lower.roughnessPath;
-                            m_TerrainMaterial.lower.albedoTex = loadTexIfPresent(m_TerrainMaterial.lower.albedoPath);
-                            m_TerrainMaterial.lower.normalTex = loadTexIfPresent(m_TerrainMaterial.lower.normalPath);
-                            m_TerrainMaterial.lower.roughnessTex = loadTexIfPresent(m_TerrainMaterial.lower.roughnessPath);
-                        }
-
-                        // Create terrain scene object for new format
-                        auto& terrainObj = m_Scene.AddObject("Terrain", nullptr);
-                        terrainObj.terrain = td;
-                    }
-                }
-
-                // Camera
-                if (env.contains("camera")) {
-                    auto& cam = env["camera"];
-                    Puluo::Vec3 pos{0.0f, 1.0f, 5.0f};
-                    if (cam.contains("position")) {
-                        auto& p = cam["position"];
-                        pos = {p[0].get<float>(), p[1].get<float>(), p[2].get<float>()};
-                    }
-                    m_Camera.RestoreState(
-                        pos,
-                        cam.value("yaw", -90.0f),
-                        cam.value("pitch", 0.0f),
-                        cam.value("fov", 45.0f),
-                        cam.value("moveSpeed", 5.0f),
-                        cam.value("sensitivity", 0.1f)
-                    );
-                }
+                m_Camera.RestoreState(
+                    pos,
+                    cam.value("yaw", -90.0f),
+                    cam.value("pitch", 0.0f),
+                    cam.value("fov", 45.0f),
+                    cam.value("moveSpeed", 5.0f),
+                    cam.value("sensitivity", 0.1f)
+                );
             }
+        }
 
-            PULUO_INFO("Scene loaded: {0}", outPath);
+        PULUO_INFO("Scene loaded: {0}", path);
+    }
+
+    void LoadScene() {
+        nfdu8filteritem_t filters[] = {{"Scene Files", "pscene"}};
+        nfdu8char_t* outPath = nullptr;
+        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
+            LoadSceneFromPath(outPath);
             NFD_FreePathU8(outPath);
         }
     }
