@@ -1474,7 +1474,7 @@ void DrawAssetBrowser(std::string& importPath) {
 } // namespace Puluo
 
 // ---- Stats Overlay (outside namespace, uses Puluo:: explicitly) ----
-void Puluo::DrawStatsOverlay(bool* open) {
+void Puluo::DrawStatsOverlay(bool* open, float vpX, float vpY, float vpW, float vpH) {
     if (!*open) return;
 
     // Smoothed FPS via ring buffer
@@ -1493,9 +1493,8 @@ void Puluo::DrawStatsOverlay(bool* open) {
     float avgFps = (count > 0) ? sum / (float)count : rawFps;
     float avgMs  = 1000.0f / avgFps;
 
-    // Position: top-right of the main viewport
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImVec2 pos(vp->WorkPos.x + vp->WorkSize.x - 12.0f, vp->WorkPos.y + 12.0f);
+    // Position: top-right of the Viewport panel
+    ImVec2 pos(vpX + vpW - 12.0f, vpY + 12.0f);
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.50f);
 

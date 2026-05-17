@@ -905,6 +905,9 @@ public:
             m_GizmoWasUsing = isUsing;
         }
 
+        // Stats overlay pinned to Viewport top-right (F3 to toggle)
+        Puluo::DrawStatsOverlay(&m_ShowStatsOverlay, vpMin.x, vpMin.y, vpSize.x, vpSize.y);
+
         ImGui::End(); // Viewport
         ImGui::PopStyleVar();
 
@@ -980,9 +983,6 @@ public:
         // Asset Browser
         std::string browserImportPath;
         Puluo::DrawAssetBrowser(browserImportPath);
-
-        // Stats overlay (F3 to toggle)
-        Puluo::DrawStatsOverlay(&m_ShowStatsOverlay);
 
         Puluo::ImGuiLayer::EndFrame();
 
