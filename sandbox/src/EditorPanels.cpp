@@ -1517,10 +1517,10 @@ void DrawAssetBrowser(std::string& importPath, std::string& scenePath) {
     });
 
     // Grid layout parameters
-    const float cardWidth = 80.0f;
-    const float cardHeight = 100.0f;
-    const float iconHeight = 55.0f;
-    const float padding = 8.0f;
+    const float cardWidth = 100.0f;
+    const float cardHeight = 120.0f;
+    const float iconHeight = 72.0f;
+    const float padding = 10.0f;
     const float cellWidth = cardWidth + padding;
     const float cellHeight = cardHeight + padding;
 
