@@ -48,7 +48,7 @@ struct PAssetMaterial {
     uint8_t useSSS       = 0;
     uint8_t _pad[2]      = {};
 
-    float sssColor[3]    = {0.5f, 0.8f, 0.2f};
+    float sssColor[3]    = {1.0f, 1.0f, 1.0f};
     float sssStrength    = 0.5f;
 };
 

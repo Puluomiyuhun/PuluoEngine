@@ -33,7 +33,7 @@ struct PBRMaterialData {
     bool useAlphaMask = false;                // 启用 mask 剔除
 
     bool useSSS = false;                      // 启用次表面散射
-    Vec3 sssColor{0.5f, 0.8f, 0.2f};         // SSS 颜色扰动
+    Vec3 sssColor{1.0f, 1.0f, 1.0f};         // SSS 颜色扰动
     float sssStrength = 0.5f;                 // SSS 强度 [0, 2]
 };
 

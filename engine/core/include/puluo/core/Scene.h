@@ -157,7 +157,7 @@ struct MaterialOverrideData {
     float alphaCutoff = 0.5f;
     bool useAlphaMask = false;
     bool useSSS = false;
-    Vec3 sssColor{0.5f, 0.8f, 0.2f};
+    Vec3 sssColor{1.0f, 1.0f, 1.0f};
     float sssStrength = 0.5f;
 };
 
