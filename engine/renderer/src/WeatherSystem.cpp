@@ -191,7 +191,7 @@ void WeatherSystem::Render(const CameraController& camera, const WeatherConfig& 
 
     RenderCommand::DrawArraysInstanced(m_VAO, 6, static_cast<uint32_t>(m_ActiveCount));
 
-    RenderCommand::SetBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    RenderCommand::SetBlending(false);
     RenderCommand::SetDepthWrite(true);
 }
 
