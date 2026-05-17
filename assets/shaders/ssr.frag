@@ -23,7 +23,7 @@ uniform int   uBinarySearchSteps;
 // Reconstruct view-space position from depth at given UV
 vec3 ViewPosFromDepth(vec2 uv) {
     float depth = texture(uDepthTexture, uv).r;
-    vec4 clipPos = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 clipPos = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 viewPos = uInvProjection * clipPos;
     return viewPos.xyz / viewPos.w;
 }
@@ -39,8 +39,8 @@ vec3 ProjectToScreen(vec3 viewPos) {
 void main() {
     float rawDepth = texture(uDepthTexture, vTexCoord).r;
 
-    // Skip far plane (sky)
-    if (rawDepth >= 1.0) {
+    // Skip far plane (reversed-Z: sky = 0.0)
+    if (rawDepth <= 0.0) {
         FragColor = vec4(0.0);
         return;
     }

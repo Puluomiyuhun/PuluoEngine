@@ -6,6 +6,10 @@
 namespace Puluo {
 
 void RenderCommand::Init() {
+    // Reversed-Z: [0,1] depth range, near=1 far=0
+    glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+    glClearDepth(0.0);
+    glDepthFunc(GL_GEQUAL);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

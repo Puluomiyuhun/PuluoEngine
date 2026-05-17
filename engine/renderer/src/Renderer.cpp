@@ -12,13 +12,13 @@ namespace Puluo {
 Renderer::SceneData Renderer::s_SceneData;
 std::unique_ptr<UniformBuffer> Renderer::s_LightUBO;
 const IBLMaps* Renderer::s_IBLMaps = nullptr;
-float Renderer::s_IBLIntensity = 1.0f;
+float Renderer::s_IBLIntensity = 1.0f; 
 const FogParams* Renderer::s_FogParams = nullptr;
 const CascadedShadowMap* Renderer::s_CSM = nullptr;
 bool Renderer::s_ShadowEnabled = true;
 const SSAO* Renderer::s_SSAO = nullptr;
 Vec2 Renderer::s_FramebufferSize{0.0f};
-int Renderer::s_TerrainDebugMode = 0;
+int Renderer::s_TerrainDebugMode = 0;    
 Mesh Renderer::s_SkyboxCube;
 uint32_t Renderer::s_DrawCallCount = 0;
 uint32_t Renderer::s_CulledCount = 0;
@@ -277,7 +277,7 @@ void Renderer::RenderSkybox(const std::shared_ptr<Shader>& skyboxShader,
     if (!s_IBLMaps || !s_IBLMaps->envCubemap) return;
 
     // Render skybox as last (depth test <=, no depth write)
-    glDepthFunc(GL_LEQUAL);
+    glDepthFunc(GL_GEQUAL);
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);  // Skybox cube is viewed from inside
 
@@ -291,13 +291,13 @@ void Renderer::RenderSkybox(const std::shared_ptr<Shader>& skyboxShader,
 
     glEnable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
+    glDepthFunc(GL_GREATER);
 }
 
 void Renderer::RenderAtmosphere(const std::shared_ptr<Shader>& atmosphereShader,
                                   const CameraController& cameraCtrl,
                                   const AtmosphereParams& params) {
-    glDepthFunc(GL_LEQUAL);
+    glDepthFunc(GL_GEQUAL);
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);  // Atmosphere cube is viewed from inside
 
@@ -329,7 +329,7 @@ void Renderer::RenderAtmosphere(const std::shared_ptr<Shader>& atmosphereShader,
 
     glEnable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
+    glDepthFunc(GL_GREATER);
 }
 
 void Renderer::RenderClouds(const std::shared_ptr<Shader>& cloudShader,
@@ -341,7 +341,7 @@ void Renderer::RenderClouds(const std::shared_ptr<Shader>& cloudShader,
                               float time) {
     if (!params.enabled) return;
 
-    glDepthFunc(GL_LEQUAL);
+    glDepthFunc(GL_GEQUAL);
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);  // Cloud cube is viewed from inside
     glEnable(GL_BLEND);
@@ -389,7 +389,7 @@ void Renderer::RenderClouds(const std::shared_ptr<Shader>& cloudShader,
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE);
     glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
+    glDepthFunc(GL_GREATER);
 }
 
 void Renderer::RenderTerrain(const std::shared_ptr<Shader>& terrainShader,

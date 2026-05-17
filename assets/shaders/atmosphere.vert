@@ -10,5 +10,6 @@ void main() {
     vLocalPos = aPos;
     mat4 rotView = mat4(mat3(uView));
     vec4 clipPos = uProjection * rotView * vec4(aPos, 1.0);
-    gl_Position = clipPos.xyww;
+    // Reversed-Z: z = 0 → depth 0.0 (far plane)
+    gl_Position = vec4(clipPos.xy, 0.0, clipPos.w);
 }

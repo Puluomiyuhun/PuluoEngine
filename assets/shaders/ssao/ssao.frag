@@ -18,7 +18,8 @@ uniform float uPower;
 
 vec3 ViewPosFromDepth(vec2 uv) {
     float depth = texture(uDepthTexture, uv).r;
-    vec4 clipPos = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    // GL_ZERO_TO_ONE: depth is already in [0,1] clip range
+    vec4 clipPos = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 viewPos = uInvProjection * clipPos;
     return viewPos.xyz / viewPos.w;
 }
@@ -51,7 +52,7 @@ float InterleavedGradientNoise(vec2 pixelCoord) {
 
 void main() {
     float rawDepth = texture(uDepthTexture, vTexCoord).r;
-    if (rawDepth >= 1.0) {
+    if (rawDepth <= 0.0) {
         FragColor = 1.0;
         return;
     }

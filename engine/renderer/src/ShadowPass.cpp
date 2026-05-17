@@ -30,6 +30,10 @@ void ShadowPass::Setup(RenderContext& ctx) {
 
     // Cull front faces during shadow pass to prevent peter-panning
     RenderCommand::SetCullFace(CullFace::Front);
+
+    // Shadow maps use standard (non-reversed) depth: near=0, far=1
+    glClearDepth(1.0);
+    glDepthFunc(GL_LESS);
 }
 
 void ShadowPass::Execute(RenderContext& ctx) {
@@ -111,6 +115,10 @@ void ShadowPass::Cleanup(RenderContext& ctx) {
     RenderCommand::SetCullFace(CullFace::Back);
     RenderCommand::SetViewport(m_SavedViewport[0], m_SavedViewport[1],
                                m_SavedViewport[2], m_SavedViewport[3]);
+
+    // Restore reversed-Z state
+    glClearDepth(0.0);
+    glDepthFunc(GL_GEQUAL);
 }
 
 } // namespace Puluo

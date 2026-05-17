@@ -3,14 +3,25 @@
 #include "puluo/core/Application.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 
 namespace Puluo {
 
 // ---- Camera ----
 
-Camera Camera::Perspective(float fovDegrees, float aspect, float nearClip, float farClip) {
+Camera Camera::Perspective(float fovDegrees, float aspect, float nearClip, float /*farClip*/) {
     Camera cam;
-    cam.m_Projection = glm::perspective(glm::radians(fovDegrees), aspect, nearClip, farClip);
+    // Reversed-Z infinite far plane projection for [0,1] depth range.
+    // Maps z=near → depth 1.0, z=∞ → depth 0.0.
+    // Eliminates far-plane clipping and gives near-uniform depth precision.
+    float f = 1.0f / std::tan(glm::radians(fovDegrees) * 0.5f);
+    Mat4& p = cam.m_Projection;
+    p = Mat4(0.0f);
+    p[0][0] = f / aspect;
+    p[1][1] = f;
+    p[2][2] = 0.0f;       // infinite far: lim(near/far) → 0
+    p[2][3] = -1.0f;      // perspective divide
+    p[3][2] = nearClip;   // reversed: near maps to 1.0
     return cam;
 }
 

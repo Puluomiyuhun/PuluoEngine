@@ -138,7 +138,7 @@ Mat4 CascadedShadowMap::ComputeLightSpaceMatrix(
     float zRange = maxZ - minZ;
     minZ -= zRange * 1.0f;
 
-    Mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
+    Mat4 lightProjection = glm::orthoZO(minX, maxX, minY, maxY, minZ, maxZ);
     return lightProjection * lightView;
 }
 

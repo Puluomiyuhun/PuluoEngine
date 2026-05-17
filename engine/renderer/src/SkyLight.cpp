@@ -132,9 +132,9 @@ void SkyLight::CaptureAtmosphereCubemap(const AtmosphereParams& params) {
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, SKY_ENV_SIZE, SKY_ENV_SIZE);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_CaptureRBO);
 
-    // Atmosphere vertex shader outputs gl_Position.z = gl_Position.w (depth = 1.0),
-    // so we need GL_LEQUAL to pass depth test, otherwise all fragments are discarded.
-    glDepthFunc(GL_LEQUAL);
+    // Atmosphere vertex shader outputs gl_Position.z = 0 (reversed-Z far plane),
+    // so we need GL_GEQUAL to pass depth test.
+    glDepthFunc(GL_GEQUAL);
 
     m_AtmosphereShader->Bind();
     m_AtmosphereShader->SetMat4("uProjection", s_CaptureProjection);

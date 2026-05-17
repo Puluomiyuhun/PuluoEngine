@@ -11,6 +11,6 @@ void main() {
     // Remove translation from view matrix
     mat4 rotView = mat4(mat3(uView));
     vec4 clipPos = uProjection * rotView * vec4(aPos, 1.0);
-    // Set z = w so depth = 1.0 (rendered behind everything)
-    gl_Position = clipPos.xyww;
+    // Reversed-Z: set z = 0 so depth = 0.0 (far plane, behind everything)
+    gl_Position = vec4(clipPos.xy, 0.0, clipPos.w);
 }

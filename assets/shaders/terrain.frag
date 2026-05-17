@@ -123,7 +123,8 @@ vec3 ProceduralLayerColor(float height01, float slopeVal) {
 float SampleShadowCascade(vec3 biasedPos, int idx) {
     vec4 lsPos = uLightSpaceMatrices[idx] * vec4(biasedPos, 1.0);
     vec3 projCoords = lsPos.xyz / lsPos.w;
-    projCoords = projCoords * 0.5 + 0.5;
+    // XY: NDC [-1,1] → UV [0,1]; Z: already [0,1] from orthoZO
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
     if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
         projCoords.y < 0.0 || projCoords.y > 1.0 ||

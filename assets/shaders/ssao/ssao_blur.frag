@@ -16,8 +16,8 @@ void main() {
     float centerVal  = texture(uSSAOInput, vTexCoord).r;
     float centerDepth = texture(uDepthTexture, vTexCoord).r;
 
-    // Skip far plane
-    if (centerDepth >= 1.0) {
+    // Skip far plane (reversed-Z: sky = 0.0)
+    if (centerDepth <= 0.0) {
         FragColor = 1.0;
         return;
     }

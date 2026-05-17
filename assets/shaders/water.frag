@@ -26,8 +26,10 @@ uniform int   uEntityID;
 uniform mat4 uProjection;
 
 float LinearizeDepth(float d) {
-    float z = d * 2.0 - 1.0;
-    return -uProjection[3][2] / (z + uProjection[2][2]);
+    // Reversed-Z infinite far plane: d = near / (-z_eye)
+    // → z_eye = -near / d  (where near = uProjection[3][2])
+    if (d <= 0.0) return -10000.0; // far plane
+    return -uProjection[3][2] / d;
 }
 
 void main() {
