@@ -158,11 +158,12 @@ void Renderer::BindFrameUniforms(const std::shared_ptr<Shader>& shader) {
         shader->SetVec3("uFogSunDirection", s_FogParams->sunDirection);
     }
 
-    // Shadow map (slot 8)
+    // Shadow map (slot 8) — must rebind every call; terrain clobbers this slot
     bool shadowEnabled = s_ShadowEnabled && s_CSM != nullptr && s_CSM->IsCreated();
     shader->SetInt("uShadowEnabled", shadowEnabled ? 1 : 0);
     if (shadowEnabled) {
         shader->SetInt("uShadowMap", 8);
+        s_CSM->BindShadowMapTexture(8);
         shader->SetMat4Array("uLightSpaceMatrices[0]",
             s_CSM->GetLightSpaceMatrices().data(), s_CSM->GetCascadeCount());
         shader->SetFloatArray("uCascadeSplits[0]",
@@ -171,11 +172,12 @@ void Renderer::BindFrameUniforms(const std::shared_ptr<Shader>& shader) {
         shader->SetFloat("uShadowNormalBias", s_CSM->GetConfig().normalBias);
     }
 
-    // SSAO (slot 9)
+    // SSAO (slot 9) — must rebind every call; terrain clobbers this slot
     bool ssaoEnabled = s_SSAO != nullptr && s_SSAO->IsCreated() && s_SSAO->GetConfig().enabled;
     shader->SetInt("uSSAOEnabled", ssaoEnabled ? 1 : 0);
     if (ssaoEnabled) {
         shader->SetInt("uSSAOMap", 9);
+        s_SSAO->BindTexture(9);
         shader->SetVec2("uScreenSize", s_FramebufferSize);
     }
 
