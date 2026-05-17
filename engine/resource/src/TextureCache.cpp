@@ -45,9 +45,19 @@ std::shared_ptr<Texture2D> TextureCache::Load(const std::string& path) {
         s_Cache.erase(it);
     }
 
-    // Try .passet binary cache (only for relative project paths, skip .passet files)
-    bool canDiskCache = IsRelativePath(key) &&
-                        (key.size() < 7 || key.substr(key.size() - 7) != ".passet");
+    // .passet files: load directly via AssetLoader (no stbi, no timestamp check)
+    if (key.size() >= 7 && key.substr(key.size() - 7) == ".passet") {
+        auto texture = AssetLoader::LoadTexture(key);
+        if (texture) {
+            s_Cache[key] = texture;
+            return texture;
+        }
+        PULUO_CORE_ERROR("TextureCache: failed to load .passet: {}", key);
+        return nullptr;
+    }
+
+    // Non-.passet relative paths: try disk cache with timestamp validation
+    bool canDiskCache = IsRelativePath(key);
     if (canDiskCache) {
         std::string cachePath = AssetImporter::GetCachePath(key);
 

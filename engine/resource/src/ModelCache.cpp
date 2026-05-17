@@ -47,9 +47,19 @@ std::shared_ptr<Model> ModelCache::Load(const std::string& path) {
 
     std::shared_ptr<Model> model;
 
-    // Try .passet binary cache (only for relative project paths, skip .passet files)
-    bool canDiskCache = IsRelativePath(key) &&
-                        (key.size() < 7 || key.substr(key.size() - 7) != ".passet");
+    // .passet files: load directly via AssetLoader (no Assimp, no timestamp check)
+    if (key.size() >= 7 && key.substr(key.size() - 7) == ".passet") {
+        model = AssetLoader::LoadModel(key);
+        if (model) {
+            s_Cache[key] = model;
+            return model;
+        }
+        PULUO_CORE_ERROR("ModelCache: failed to load .passet: {}", key);
+        return nullptr;
+    }
+
+    // Non-.passet relative paths: try disk cache with timestamp validation
+    bool canDiskCache = IsRelativePath(key);
     if (canDiskCache) {
         std::string cachePath = AssetImporter::GetCachePath(key);
 
@@ -67,7 +77,6 @@ std::shared_ptr<Model> ModelCache::Load(const std::string& path) {
                 PULUO_CORE_INFO("ModelCache: loaded from .passet cache: {}", cachePath);
                 return model;
             }
-            // Cache file corrupted, fall through to original load
             PULUO_CORE_WARN("ModelCache: .passet cache invalid, falling back to original: {}", key);
         }
     }
@@ -83,10 +92,10 @@ std::shared_ptr<Model> ModelCache::Load(const std::string& path) {
     PULUO_CORE_INFO("ModelCache miss, loaded: {}", key);
 
     // Auto-generate .passet cache for next time (only relative project paths)
-    if (canDiskCache && key.size() >= 4) {
-        std::string ext = key.substr(key.size() - 4);
-        // Only cache known model formats
-        if (ext == ".glb" || ext == "gltf" || ext == ".fbx" || ext == ".obj") {
+    if (canDiskCache && key.rfind('.') != std::string::npos) {
+        std::string ext = key.substr(key.rfind('.'));
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".glb" || ext == ".gltf" || ext == ".fbx" || ext == ".obj") {
             std::string cachePath = AssetImporter::Import(key);
             if (!cachePath.empty()) {
                 PULUO_CORE_INFO("ModelCache: generated .passet cache: {}", cachePath);

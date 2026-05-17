@@ -136,7 +136,10 @@ std::string AssetImporter::GetCachePath(const std::string& sourcePath, const std
     return cacheDir + "/" + subpath + ".passet";
 }
 
-std::string AssetImporter::ImportTexture(const std::string& sourcePath, const std::string& cacheDir) {
+// ---------------------------------------------------------------------------
+// Shared implementation: texture
+// ---------------------------------------------------------------------------
+std::string AssetImporter::WriteTexturePAsset(const std::string& sourcePath, const std::string& outPath) {
     stbi_set_flip_vertically_on_load(1);
 
     int w, h, ch;
@@ -148,7 +151,6 @@ std::string AssetImporter::ImportTexture(const std::string& sourcePath, const st
 
     size_t pixelSize = static_cast<size_t>(w) * h * ch;
 
-    std::string outPath = GetCachePath(sourcePath, cacheDir);
     std::filesystem::create_directories(std::filesystem::path(outPath).parent_path());
 
     std::ofstream file(outPath, std::ios::binary);
@@ -158,12 +160,10 @@ std::string AssetImporter::ImportTexture(const std::string& sourcePath, const st
         return "";
     }
 
-    // Header
     PAssetHeader header;
     header.type = static_cast<uint32_t>(PAssetType::Texture);
     WriteVal(file, header);
 
-    // Texture entry + raw pixels
     PAssetTextureEntry entry;
     entry.width = static_cast<uint32_t>(w);
     entry.height = static_cast<uint32_t>(h);
@@ -180,7 +180,10 @@ std::string AssetImporter::ImportTexture(const std::string& sourcePath, const st
     return outPath;
 }
 
-std::string AssetImporter::Import(const std::string& sourcePath, const std::string& cacheDir) {
+// ---------------------------------------------------------------------------
+// Shared implementation: model
+// ---------------------------------------------------------------------------
+std::string AssetImporter::WriteModelPAsset(const std::string& sourcePath, const std::string& outPath) {
     // Parse model with Assimp
     Assimp::Importer importer;
     const aiScene* scene = importer.ReadFile(sourcePath,
@@ -196,7 +199,6 @@ std::string AssetImporter::Import(const std::string& sourcePath, const std::stri
     std::string modelDir = std::filesystem::path(sourcePath).parent_path().string();
 
     // ---- Decode all unique textures ----
-    // Key: texture ref string -> index in decodedTextures
     std::vector<DecodedTexture> decodedTextures;
     std::unordered_map<std::string, int32_t> texRefToIndex;
 
@@ -312,7 +314,6 @@ std::string AssetImporter::Import(const std::string& sourcePath, const std::stri
     }
 
     // ---- Write .passet file ----
-    std::string outPath = GetCachePath(sourcePath, cacheDir);
     std::filesystem::create_directories(std::filesystem::path(outPath).parent_path());
 
     std::ofstream file(outPath, std::ios::binary);
@@ -367,6 +368,54 @@ std::string AssetImporter::Import(const std::string& sourcePath, const std::stri
     PULUO_CORE_INFO("AssetImporter: Exported '{}' -> '{}' ({} textures, {} materials, {} meshes)",
                     sourcePath, outPath, texCount, matCount, meshCount);
     return outPath;
+}
+
+// ---------------------------------------------------------------------------
+// Import-to-project API
+// ---------------------------------------------------------------------------
+std::string AssetImporter::ImportModelToProject(const std::string& externalPath, const std::string& destDir) {
+    std::string filename = std::filesystem::path(externalPath).stem().string() + ".passet";
+    std::string outPath = destDir + "/" + filename;
+
+    // Handle name collision: soldier.passet → soldier_1.passet
+    if (std::filesystem::exists(outPath)) {
+        int counter = 1;
+        std::string stem = std::filesystem::path(externalPath).stem().string();
+        do {
+            outPath = destDir + "/" + stem + "_" + std::to_string(counter) + ".passet";
+            ++counter;
+        } while (std::filesystem::exists(outPath));
+    }
+
+    return WriteModelPAsset(externalPath, outPath);
+}
+
+std::string AssetImporter::ImportTextureToProject(const std::string& externalPath, const std::string& destDir) {
+    std::string filename = std::filesystem::path(externalPath).stem().string() + ".passet";
+    std::string outPath = destDir + "/" + filename;
+
+    // Handle name collision
+    if (std::filesystem::exists(outPath)) {
+        int counter = 1;
+        std::string stem = std::filesystem::path(externalPath).stem().string();
+        do {
+            outPath = destDir + "/" + stem + "_" + std::to_string(counter) + ".passet";
+            ++counter;
+        } while (std::filesystem::exists(outPath));
+    }
+
+    return WriteTexturePAsset(externalPath, outPath);
+}
+
+// ---------------------------------------------------------------------------
+// Legacy cache API (backward compatibility with old .pscene files)
+// ---------------------------------------------------------------------------
+std::string AssetImporter::Import(const std::string& sourcePath, const std::string& cacheDir) {
+    return WriteModelPAsset(sourcePath, GetCachePath(sourcePath, cacheDir));
+}
+
+std::string AssetImporter::ImportTexture(const std::string& sourcePath, const std::string& cacheDir) {
+    return WriteTexturePAsset(sourcePath, GetCachePath(sourcePath, cacheDir));
 }
 
 } // namespace Puluo
