@@ -37,7 +37,9 @@ void main() {
     // Reconstruct normal from depth cross-derivatives
     vec3 dPdx = dFdx(fragPos);
     vec3 dPdy = dFdy(fragPos);
-    vec3 normal = normalize(cross(dPdx, dPdy));
+    vec3 normal = normalize(cross(dPdy, dPdx));
+    // Ensure normal points toward camera (view-space Z is negative)
+    if (normal.z < 0.0) normal = -normal;
 
     // Random rotation vector from tiled noise texture
     vec3 randomVec = normalize(texture(uNoiseTexture, vTexCoord * uNoiseScale).xyz);

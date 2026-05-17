@@ -16,6 +16,7 @@ void SSAOPass::Execute(RenderContext& ctx) {
     if (!IsEnabled()) return;
 
     // Sync UI config to SSAO object
+    ctx.ssao->SetKernelSize(ctx.ssaoConfig->kernelSize);
     ctx.ssao->GetConfig().radius = ctx.ssaoConfig->radius;
     ctx.ssao->GetConfig().bias = ctx.ssaoConfig->bias;
     ctx.ssao->GetConfig().power = ctx.ssaoConfig->power;

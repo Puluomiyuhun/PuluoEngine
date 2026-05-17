@@ -143,6 +143,14 @@ void SSAO::GenerateNoiseTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 }
 
+void SSAO::SetKernelSize(uint32_t size) {
+    size = std::clamp(size, 8u, 64u);
+    if (size != m_Config.kernelSize) {
+        m_Config.kernelSize = size;
+        GenerateKernel();
+    }
+}
+
 void SSAO::Generate(uint32_t depthTexture, const Mat4& projection, uint32_t emptyVAO) {
     if (!m_SSAOFBO || !m_SSAOShader || !m_BlurShader) return;
 

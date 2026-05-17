@@ -38,6 +38,9 @@ public:
     const SSAOConfig& GetConfig() const { return m_Config; }
     bool IsCreated() const { return m_SSAOFBO != 0; }
 
+    // Update kernel size at runtime (regenerates kernel if changed)
+    void SetKernelSize(uint32_t size);
+
 private:
     SSAOConfig m_Config;
 
