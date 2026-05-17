@@ -23,9 +23,13 @@ void main() {
     vec3 worldOffset;
 
     if (uWeatherType == 0) {
-        // Rain: camera-facing billboard, stretched vertically along screen
+        // Rain: camera-facing billboard with perspective foreshortening
+        // When looking horizontally, full streak; when looking along fall dir, shrinks to dot
+        vec3 camFwd = normalize(cross(uCameraRight, uCameraUp));
+        float foreshorten = 1.0 - abs(dot(camFwd, normalize(uFallDirection)));
+        float effectiveStreak = mix(uSize, uStreakLength, foreshorten);
         worldOffset = uCameraRight * aQuadPos.x * uSize
-                    + uCameraUp    * aQuadPos.y * uStreakLength;
+                    + uCameraUp    * aQuadPos.y * effectiveStreak;
     } else {
         // Snow: standard camera-aligned billboard
         worldOffset = uCameraRight * aQuadPos.x * uSize

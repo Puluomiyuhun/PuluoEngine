@@ -1144,9 +1144,9 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                 // Apply sensible defaults per type
                 if (newType == WeatherType::Rain) {
                     weatherConfig.fallSpeed = 12.0f;
-                    weatherConfig.size = 0.08f;
+                    weatherConfig.size = 0.015f;
                     weatherConfig.streakLength = 0.6f;
-                    weatherConfig.color = Vec4(0.7f, 0.8f, 0.9f, 0.4f);
+                    weatherConfig.color = Vec4(0.7f, 0.8f, 0.9f, 0.8f);
                 } else if (newType == WeatherType::Snow) {
                     weatherConfig.fallSpeed = 1.5f;
                     weatherConfig.size = 0.06f;
@@ -1716,7 +1716,7 @@ void Puluo::DrawStatsOverlay(bool* open, float vpX, float vpY, float vpW, float 
     // Position: top-right of the Viewport panel
     ImVec2 pos(vpX + vpW - 12.0f, vpY + 12.0f);
     ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-    ImGui::SetNextWindowBgAlpha(0.50f);
+    ImGui::SetNextWindowBgAlpha(0.50f); 
 
     ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoFocusOnAppearing |
