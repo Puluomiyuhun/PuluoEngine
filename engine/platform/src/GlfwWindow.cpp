@@ -44,7 +44,7 @@ public:
         PULUO_CORE_ASSERT(version, "Failed to initialize glad!");
         PULUO_CORE_INFO("OpenGL {0}.{1} loaded", GLAD_VERSION_MAJOR(version), GLAD_VERSION_MINOR(version));
 
-        glfwSwapInterval(1);
+        glfwSwapInterval(0); // VSync off — uncapped framerate
         glfwSetWindowUserPointer(m_Window, &m_Data);
 
         // ---- Register GLFW callbacks ----
