@@ -20,6 +20,8 @@ const SSAO* Renderer::s_SSAO = nullptr;
 Vec2 Renderer::s_FramebufferSize{0.0f};
 int Renderer::s_TerrainDebugMode = 0;
 Mesh Renderer::s_SkyboxCube;
+uint32_t Renderer::s_DrawCallCount = 0;
+uint32_t Renderer::s_CulledCount = 0;
 
 void Renderer::Init() {
     RenderCommand::Init();
@@ -31,6 +33,16 @@ void Renderer::Init() {
 void Renderer::Shutdown() {
     s_LightUBO.reset();
 }
+
+void Renderer::ResetFrameStats() {
+    s_DrawCallCount = 0;
+    s_CulledCount = 0;
+}
+
+void Renderer::IncrementDrawCall() { ++s_DrawCallCount; }
+void Renderer::IncrementCulled()   { ++s_CulledCount; }
+uint32_t Renderer::GetDrawCallCount() { return s_DrawCallCount; }
+uint32_t Renderer::GetCulledCount()   { return s_CulledCount; }
 
 void Renderer::SetIBLMaps(const IBLMaps* iblMaps) {
     s_IBLMaps = iblMaps;

@@ -47,6 +47,13 @@ public:
     // Runtime toggle for CSM shadows
     static bool s_ShadowEnabled;
 
+    // Per-frame frustum culling statistics
+    static void ResetFrameStats();
+    static void IncrementDrawCall();
+    static void IncrementCulled();
+    static uint32_t GetDrawCallCount();
+    static uint32_t GetCulledCount();
+
     // Set SSAO texture for PBR/terrain rendering (slot 9)
     static void SetSSAOMap(const SSAO* ssao, const Vec2& framebufferSize);
 
@@ -120,6 +127,8 @@ private:
     static const SSAO* s_SSAO;
     static Vec2 s_FramebufferSize;
     static Mesh s_SkyboxCube;
+    static uint32_t s_DrawCallCount;
+    static uint32_t s_CulledCount;
 };
 
 } // namespace Puluo

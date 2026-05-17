@@ -400,6 +400,7 @@ public:
 
         // ---- Per-instance frustum + distance culling (shared by all passes) ----
         Puluo::Frustum frustum = Puluo::Frustum::FromVPMatrix(m_Camera.GetViewProjection());
+        Puluo::Renderer::ResetFrameStats();
         if (!m_InstancedMeshes.empty()) {
             for (auto& [idx, im] : m_InstancedMeshes) {
                 im->CullAndUpload(frustum, m_Camera.GetPosition(), m_InstancedMaxDrawDistance);
@@ -587,9 +588,12 @@ public:
                 // Frustum cull: transform model AABB to world space and test
                 Puluo::Mat4 modelMatrix = obj.transform.ToMatrix();
                 Puluo::AABB worldAABB = Puluo::TransformAABB(obj.model->GetBoundingBox(), modelMatrix);
-                if (!frustum.TestAABB(worldAABB))
+                if (!frustum.TestAABB(worldAABB)) {
+                    Puluo::Renderer::IncrementCulled();
                     continue;
+                }
                 Puluo::Renderer::SubmitModel(m_PBRShader, *obj.model, modelMatrix, static_cast<int>(i));
+                Puluo::Renderer::IncrementDrawCall();
             }
         }
 
