@@ -47,7 +47,7 @@ float CalcTessLevel(vec3 worldPos) {
     float dist = distance(worldPos, uCamPos);
     float t = clamp(dist / (uTerrainSize * 0.5), 0.0, 1.0);
     // Smooth exponential falloff for better near/far distribution
-    float level = mix(64.0, 2.0, t * t);
+    float level = mix(32.0, 2.0, t * t);
     return level;
 }
 

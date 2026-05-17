@@ -14,7 +14,7 @@ uniform sampler2D uHeightmap;
 // Must match terrain.tesc exactly to avoid depth mismatch affecting SSAO
 float CalcTessLevel(vec3 worldPos) {
     float dist = distance(worldPos, uCamPos);
-    float level = mix(64.0, 2.0, clamp(dist / (uTerrainSize * 0.8), 0.0, 1.0));
+    float level = mix(32.0, 2.0, clamp(dist / (uTerrainSize * 0.8), 0.0, 1.0));
     return level;
 }
 
