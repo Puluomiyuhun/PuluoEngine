@@ -102,6 +102,8 @@ struct RenderContext {
 
     // Post-process
     bool fxaaEnabled = false;
+    float saturation = 1.0f;   // 0=grayscale, 1=normal, >1=oversaturated
+    float contrast = 1.0f;     // 0.5=low, 1=normal, 2=high
     uint32_t emptyVAO = 0;  // For fullscreen triangle draws
 };
 

@@ -13,6 +13,10 @@ uniform vec2 uInverseScreenSize; // 1.0 / vec2(width, height)
 uniform int uSSREnabled;
 uniform sampler2D uSSRTexture;
 
+// Color grading
+uniform float uSaturation; // 0=grayscale, 1=normal, >1=oversaturated
+uniform float uContrast;   // 0.5=low, 1=normal, 2=high
+
 // FXAA quality parameters
 #define EDGE_THRESHOLD_MIN 0.0312  // Skip very dark edges (invisible aliasing)
 #define EDGE_THRESHOLD_MAX 0.125   // Skip low-contrast edges
@@ -54,7 +58,11 @@ void main() {
 
     // Skip if contrast is too low (no visible aliasing) or too dark
     if (lumaRange < max(EDGE_THRESHOLD_MIN, lumaMax * EDGE_THRESHOLD_MAX)) {
-        FragColor = vec4(colorCenter, 1.0);
+        vec3 c = colorCenter;
+        float g = Luma(c);
+        c = mix(vec3(g), c, uSaturation);
+        c = (c - 0.5) * uContrast + 0.5;
+        FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
         return;
     }
 
@@ -191,4 +199,10 @@ void main() {
         vec4 ssr = texture(uSSRTexture, finalUV);
         FragColor.rgb = mix(FragColor.rgb, ssr.rgb, ssr.a);
     }
+
+    // Color grading: saturation then contrast
+    float gray = Luma(FragColor.rgb);
+    FragColor.rgb = mix(vec3(gray), FragColor.rgb, uSaturation);
+    FragColor.rgb = (FragColor.rgb - 0.5) * uContrast + 0.5;
+    FragColor.rgb = clamp(FragColor.rgb, 0.0, 1.0);
 }

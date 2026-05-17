@@ -57,6 +57,10 @@ void PostProcessPass::Execute(RenderContext& ctx) {
         ctx.ssr->BindTexture(10);
     }
 
+    // Color grading
+    ctx.fxaaShader->SetFloat("uSaturation", ctx.saturation);
+    ctx.fxaaShader->SetFloat("uContrast", ctx.contrast);
+
     glBindVertexArray(ctx.emptyVAO);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);

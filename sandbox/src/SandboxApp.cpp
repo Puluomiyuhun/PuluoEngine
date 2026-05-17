@@ -722,6 +722,8 @@ public:
             m_RenderCtx.ssrConfig = &m_SSRConfig;
             m_RenderCtx.fxaaShader = m_FXAAShader;
             m_RenderCtx.fxaaEnabled = m_FXAAEnabled;
+            m_RenderCtx.saturation = m_Saturation;
+            m_RenderCtx.contrast = m_Contrast;
 
             m_PostProcessPass.Run(m_RenderCtx);
         }
@@ -942,7 +944,7 @@ public:
 
         // Editor panels
         bool toolbarImport = false;
-        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_FXAAEnabled, m_SSAOConfig, m_SSRConfig, m_WeatherConfig);
+        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_FXAAEnabled, m_Saturation, m_Contrast, m_SSAOConfig, m_SSRConfig, m_WeatherConfig);
         wantsImport = wantsImport || toolbarImport;
 
         Puluo::DrawSceneHierarchy(m_Scene, m_CommandHistory);
@@ -1168,6 +1170,7 @@ private:
                     dst.albedoPath = src.albedoPath;
                     dst.normalPath = src.normalPath;
                     dst.roughnessPath = src.roughnessPath;
+                    dst.normalStrength = src.normalStrength;
                 };
                 syncLayer(td.lower, m_TerrainMaterial.lower);
                 syncLayer(td.upper, m_TerrainMaterial.upper);
@@ -1353,6 +1356,7 @@ private:
                     dst.albedoPath = src.albedoPath;
                     dst.normalPath = src.normalPath;
                     dst.roughnessPath = src.roughnessPath;
+                    dst.normalStrength = src.normalStrength;
                     dst.albedoTex = loadTexIfPresent(dst.albedoPath);
                     dst.normalTex = loadTexIfPresent(dst.normalPath);
                     dst.roughnessTex = loadTexIfPresent(dst.roughnessPath);
@@ -1592,6 +1596,8 @@ private:
     std::shared_ptr<Puluo::Shader> m_FXAAShader;
     uint32_t m_EmptyVAO = 0;
     bool m_FXAAEnabled = true;
+    float m_Saturation = 1.0f;
+    float m_Contrast = 1.0f;
     Puluo::CameraController m_Camera;
     Puluo::LightManager m_Lights;
     Puluo::IBLMaps m_IBLMaps;

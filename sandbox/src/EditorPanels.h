@@ -33,7 +33,8 @@ void DrawInspector(Scene& scene, CommandHistory& history,
 void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                  bool& useAtmosphere, AtmosphereParams& atmosphereParams,
                  FogParams& fogParams, CloudParams& cloudParams,
-                 bool& fxaaEnabled, SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
+                 bool& fxaaEnabled, float& saturation, float& contrast,
+                 SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
                  WeatherConfig& weatherConfig);
 bool DrawGizmo(SceneObject& object, const Mat4& view, const Mat4& projection,
                GizmoMode mode, float viewportX, float viewportY, float viewportW, float viewportH);

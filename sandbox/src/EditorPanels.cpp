@@ -886,18 +886,21 @@ void DrawInspector(Scene& scene, CommandHistory& history,
             if (ImGui::TreeNode("Lower Layer (low height)")) {
                 TerrainTexSlotUI("Albedo##lower", terrainMaterial.lower.albedoTex, terrainMaterial.lower.albedoPath);
                 TerrainTexSlotUI("Normal##lower", terrainMaterial.lower.normalTex, terrainMaterial.lower.normalPath);
+                ImGui::SliderFloat("Normal Strength##lower", &terrainMaterial.lower.normalStrength, 0.0f, 2.0f, "%.2f");
                 TerrainTexSlotUI("Roughness##lower", terrainMaterial.lower.roughnessTex, terrainMaterial.lower.roughnessPath);
                 ImGui::TreePop();
             }
             if (ImGui::TreeNode("Upper Layer (high height)")) {
                 TerrainTexSlotUI("Albedo##upper", terrainMaterial.upper.albedoTex, terrainMaterial.upper.albedoPath);
                 TerrainTexSlotUI("Normal##upper", terrainMaterial.upper.normalTex, terrainMaterial.upper.normalPath);
+                ImGui::SliderFloat("Normal Strength##upper", &terrainMaterial.upper.normalStrength, 0.0f, 2.0f, "%.2f");
                 TerrainTexSlotUI("Roughness##upper", terrainMaterial.upper.roughnessTex, terrainMaterial.upper.roughnessPath);
                 ImGui::TreePop();
             }
             if (ImGui::TreeNode("Slope Layer (steep areas)")) {
                 TerrainTexSlotUI("Albedo##slope", terrainMaterial.slope.albedoTex, terrainMaterial.slope.albedoPath);
                 TerrainTexSlotUI("Normal##slope", terrainMaterial.slope.normalTex, terrainMaterial.slope.normalPath);
+                ImGui::SliderFloat("Normal Strength##slope", &terrainMaterial.slope.normalStrength, 0.0f, 2.0f, "%.2f");
                 TerrainTexSlotUI("Roughness##slope", terrainMaterial.slope.roughnessTex, terrainMaterial.slope.roughnessPath);
                 ImGui::TreePop();
             }
@@ -994,7 +997,8 @@ void DrawInspector(Scene& scene, CommandHistory& history,
 void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                  bool& useAtmosphere, AtmosphereParams& atmosphereParams,
                  FogParams& fogParams, CloudParams& cloudParams,
-                 bool& fxaaEnabled, SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
+                 bool& fxaaEnabled, float& saturation, float& contrast,
+                 SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
                  WeatherConfig& weatherConfig) {
     ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoCollapse);
 
@@ -1175,6 +1179,8 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
     // ---- Post Processing ----
     if (ImGui::CollapsingHeader("Post Processing")) {
         ImGui::Checkbox("FXAA", &fxaaEnabled);
+        ImGui::SliderFloat("Saturation", &saturation, 0.0f, 2.0f, "%.2f");
+        ImGui::SliderFloat("Contrast", &contrast, 0.5f, 2.0f, "%.2f");
 
         ImGui::Separator();
         ImGui::Checkbox("SSAO", &ssaoConfig.enabled);
