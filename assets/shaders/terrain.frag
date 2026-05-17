@@ -83,8 +83,20 @@ uniform sampler2D uSSAOMap;
 uniform bool  uSSAOEnabled;
 uniform vec2  uScreenSize;
 
+// IBL
+uniform samplerCube uIrradianceMap;
+uniform samplerCube uPrefilterMap;
+uniform sampler2D   uBrdfLUT;
+uniform bool  uUseIBL;
+uniform float uIBLIntensity;
+
 // Debug: 0=off, 1=shadow, 2=SSAO, 3=NdotL, 4=ambient, 5=sunColor, 6=layer blend
 uniform int uDebugMode;
+
+// Fresnel with roughness (for IBL)
+vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
+    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
 
 // Procedural fallback albedo for a layer
 vec3 ProceduralLayerColor(float height01, float slopeVal) {
@@ -298,11 +310,31 @@ void main() {
     float shadow = SampleShadowCSM(vWorldPos, N);
     vec3 Lo = (kD * albedo / PI + specular) * sunLight * NdotL * shadow;
 
-    // Ambient (sky-like, scales with sun brightness for day/night)
-    float sunY = uSunDirection.y;
-    float nightFade = smoothstep(-0.1, 0.15, sunY);
-    vec3 skyAmbient = mix(vec3(0.005), vec3(0.08, 0.1, 0.15), nightFade);
-    vec3 ambient = albedo * skyAmbient;
+    // Ambient (IBL or fixed fallback)
+    vec3 ambient;
+    if (uUseIBL) {
+        vec3 F_ibl = FresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+        vec3 kS_ibl = F_ibl;
+        vec3 kD_ibl = (1.0 - kS_ibl) * (1.0 - metallic);
+
+        // Diffuse IBL
+        vec3 irradiance = texture(uIrradianceMap, N).rgb;
+        vec3 diffuseIBL = irradiance * albedo;
+
+        // Specular IBL
+        vec3 R = reflect(-V, N);
+        const float MAX_REFLECTION_LOD = 4.0;
+        vec3 prefilteredColor = textureLod(uPrefilterMap, R, roughness * MAX_REFLECTION_LOD).rgb;
+        vec2 brdf = texture(uBrdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
+        vec3 specularIBL = prefilteredColor * (F_ibl * brdf.x + brdf.y);
+
+        ambient = (kD_ibl * diffuseIBL + specularIBL) * uIBLIntensity;
+    } else {
+        float sunY = uSunDirection.y;
+        float nightFade = smoothstep(-0.1, 0.15, sunY);
+        vec3 skyAmbient = mix(vec3(0.005), vec3(0.08, 0.1, 0.15), nightFade);
+        ambient = albedo * skyAmbient;
+    }
     // Screen-space ambient occlusion
     if (uSSAOEnabled) {
         vec2 ssaoUV = gl_FragCoord.xy / uScreenSize;

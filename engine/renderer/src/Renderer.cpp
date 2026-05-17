@@ -508,6 +508,19 @@ void Renderer::RenderTerrain(const std::shared_ptr<Shader>& terrainShader,
     // Debug mode
     terrainShader->SetInt("uDebugMode", s_TerrainDebugMode);
 
+    // IBL (slots 12-14)
+    bool useIBL = s_IBLMaps != nullptr && s_IBLMaps->irradianceMap != nullptr;
+    terrainShader->SetInt("uUseIBL", useIBL ? 1 : 0);
+    if (useIBL) {
+        terrainShader->SetInt("uIrradianceMap", 12);
+        terrainShader->SetInt("uPrefilterMap", 13);
+        terrainShader->SetInt("uBrdfLUT", 14);
+        terrainShader->SetFloat("uIBLIntensity", s_IBLIntensity);
+        s_IBLMaps->irradianceMap->Bind(12);
+        s_IBLMaps->prefilterMap->Bind(13);
+        glBindTextureUnit(14, s_IBLMaps->brdfLUT);
+    }
+
     RenderCommand::DrawPatches(terrain.GetPatchVAO(), terrain.GetPatchVertexCount());
 }
 
