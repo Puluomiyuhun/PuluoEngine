@@ -57,28 +57,84 @@ std::string ConsumeTerrainHeightmapLoadPath() {
 // Keep loaded terrain textures alive
 static std::vector<std::shared_ptr<Texture2D>> s_TerrainTextures;
 
-// Helper: load a texture via file dialog, returns {GL texture ID, path} (0/"" on cancel)
-static std::pair<uint32_t, std::string> LoadTerrainTextureDialog() {
-    nfdu8char_t* outPath = nullptr;
-    nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp,passet" };
-    nfdopendialogu8args_t args = {0};
-    args.filterList = &filter;
-    args.filterCount = 1;
-    if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY) {
-        std::string pathStr(outPath);
-        NFD_FreePathU8(outPath);
-        // External image file: import to project first, then load .passet
-        std::string ext = std::filesystem::path(pathStr).extension().string();
+// Helper: scan a directory for .passet files and return their relative paths
+static std::vector<std::string> ScanPAssetFiles(const std::string& dir) {
+    std::vector<std::string> results;
+    if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) return results;
+    for (auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+        if (!entry.is_regular_file()) continue;
+        std::string ext = entry.path().extension().string();
         for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        if (ext != ".passet") {
-            std::string passetPath = AssetImporter::ImportTextureToProject(pathStr);
-            if (!passetPath.empty()) pathStr = passetPath;
+        if (ext == ".passet") {
+            results.push_back(entry.path().string());
         }
-        auto tex = TextureCache::Load(pathStr);
-        if (tex && tex->GetRendererID()) {
-            s_TerrainTextures.push_back(tex);
-            return {tex->GetRendererID(), pathStr};
+    }
+    std::sort(results.begin(), results.end());
+    return results;
+}
+
+// Helper: pick a .passet texture from assets/textures/ via ImGui combo popup.
+// Returns the selected path, or empty string if nothing selected.
+static std::string PickTexturePAsset(const char* popupID) {
+    std::string selected;
+    if (ImGui::BeginPopup(popupID)) {
+        static std::vector<std::string> cachedFiles;
+        static bool needsRefresh = true;
+        if (needsRefresh) {
+            cachedFiles = ScanPAssetFiles("assets/textures");
+            needsRefresh = false;
         }
+        if (cachedFiles.empty()) {
+            ImGui::TextDisabled("No .passet textures found in assets/textures/");
+            ImGui::TextDisabled("Use Asset Browser \"Import Texture...\" to import first");
+        } else {
+            for (auto& path : cachedFiles) {
+                std::string name = std::filesystem::path(path).filename().string();
+                if (ImGui::MenuItem(name.c_str())) {
+                    selected = path;
+                    needsRefresh = true; // refresh next time popup opens
+                }
+            }
+        }
+        ImGui::EndPopup();
+    }
+    return selected;
+}
+
+// Helper: pick a .passet model from assets/models/ via ImGui combo popup.
+static std::string PickModelPAsset(const char* popupID) {
+    std::string selected;
+    if (ImGui::BeginPopup(popupID)) {
+        static std::vector<std::string> cachedFiles;
+        static bool needsRefresh = true;
+        if (needsRefresh) {
+            cachedFiles = ScanPAssetFiles("assets/models");
+            needsRefresh = false;
+        }
+        if (cachedFiles.empty()) {
+            ImGui::TextDisabled("No .passet models found in assets/models/");
+            ImGui::TextDisabled("Use Asset Browser \"Import Model...\" to import first");
+        } else {
+            for (auto& path : cachedFiles) {
+                std::string name = std::filesystem::path(path).filename().string();
+                if (ImGui::MenuItem(name.c_str())) {
+                    selected = path;
+                    needsRefresh = true;
+                }
+            }
+        }
+        ImGui::EndPopup();
+    }
+    return selected;
+}
+
+// Helper: load terrain texture from .passet, returns {GL texture ID, path}
+static std::pair<uint32_t, std::string> LoadTerrainTextureFromPAsset(const std::string& path) {
+    if (path.empty()) return {0, ""};
+    auto tex = TextureCache::Load(path);
+    if (tex && tex->GetRendererID()) {
+        s_TerrainTextures.push_back(tex);
+        return {tex->GetRendererID(), path};
     }
     return {0, ""};
 }
@@ -103,26 +159,14 @@ static void MaterialTexSlotUI(const char* label, std::shared_ptr<Texture2D>& tex
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Browse")) {
-        nfdu8char_t* outPath = nullptr;
-        nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp,passet" };
-        nfdopendialogu8args_t args = {0};
-        args.filterList = &filter;
-        args.filterCount = 1;
-        if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY) {
-            std::string pathStr(outPath);
-            NFD_FreePathU8(outPath);
-            // External image: import to project first
-            std::string ext = std::filesystem::path(pathStr).extension().string();
-            for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            if (ext != ".passet") {
-                std::string passetPath = AssetImporter::ImportTextureToProject(pathStr);
-                if (!passetPath.empty()) pathStr = passetPath;
-            }
-            auto tex = TextureCache::Load(pathStr);
-            if (tex && tex->GetRendererID()) {
-                s_MaterialTextures.push_back(tex);
-                texSlot = tex;
-            }
+        ImGui::OpenPopup("##PickTex");
+    }
+    std::string picked = PickTexturePAsset("##PickTex");
+    if (!picked.empty()) {
+        auto tex = TextureCache::Load(picked);
+        if (tex && tex->GetRendererID()) {
+            s_MaterialTextures.push_back(tex);
+            texSlot = tex;
         }
     }
     ImGui::PopID();
@@ -146,32 +190,21 @@ static void MaterialTexSlotUI(const char* label, std::shared_ptr<Texture2D>& tex
     }
     ImGui::SameLine();
     if (ImGui::SmallButton("Browse")) {
-        nfdu8char_t* outPath = nullptr;
-        nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp,passet" };
-        nfdopendialogu8args_t args = {0};
-        args.filterList = &filter;
-        args.filterCount = 1;
-        if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY) {
-            std::string pathStr(outPath);
-            NFD_FreePathU8(outPath);
-            std::string ext = std::filesystem::path(pathStr).extension().string();
-            for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            if (ext != ".passet") {
-                std::string passetPath = AssetImporter::ImportTextureToProject(pathStr);
-                if (!passetPath.empty()) pathStr = passetPath;
-            }
-            auto tex = TextureCache::Load(pathStr);
-            if (tex && tex->GetRendererID()) {
-                s_MaterialTextures.push_back(tex);
-                texSlot = tex;
-                pathOut = pathStr;
-            }
+        ImGui::OpenPopup("##PickTex");
+    }
+    std::string picked = PickTexturePAsset("##PickTex");
+    if (!picked.empty()) {
+        auto tex = TextureCache::Load(picked);
+        if (tex && tex->GetRendererID()) {
+            s_MaterialTextures.push_back(tex);
+            texSlot = tex;
+            pathOut = picked;
         }
     }
     ImGui::PopID();
 }
 
-// Helper: show texture slot button
+// Helper: show texture slot button (terrain layers)
 static void TerrainTexSlotUI(const char* label, uint32_t& texID, std::string& texPath) {
     ImGui::PushID(label);
     if (texID) {
@@ -180,7 +213,11 @@ static void TerrainTexSlotUI(const char* label, uint32_t& texID, std::string& te
         if (ImGui::SmallButton("X")) { texID = 0; texPath.clear(); }
     } else {
         if (ImGui::Button(label)) {
-            auto [loaded, path] = LoadTerrainTextureDialog();
+            ImGui::OpenPopup("##PickTerrainTex");
+        }
+        std::string picked = PickTexturePAsset("##PickTerrainTex");
+        if (!picked.empty()) {
+            auto [loaded, path] = LoadTerrainTextureFromPAsset(picked);
             if (loaded) { texID = loaded; texPath = path; }
         }
     }
@@ -328,26 +365,20 @@ void DrawSceneHierarchy(Scene& scene, CommandHistory& history) {
         ImGui::OpenPopup("AddISMPopup");
     }
     if (ImGui::BeginPopup("AddISMPopup")) {
-        ImGui::Text("Select a model file to instance.");
+        ImGui::Text("Select a model from project assets.");
         ImGui::Separator();
-        if (ImGui::MenuItem("Browse Model...")) {
-            nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj,passet"}};
-            nfdu8char_t* outPath = nullptr;
-            if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
-                std::string pathStr(outPath);
-                NFD_FreePathU8(outPath);
-                // External model: import to project first
-                std::string ext = std::filesystem::path(pathStr).extension().string();
-                for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                if (ext != ".passet") {
-                    std::string passetPath = AssetImporter::ImportModelToProject(pathStr);
-                    if (!passetPath.empty()) pathStr = passetPath;
-                }
-                std::filesystem::path p(pathStr);
-                std::string name = "ISM_" + p.stem().string();
-                auto& obj = scene.AddObject(name, nullptr);
+        auto modelFiles = ScanPAssetFiles("assets/models");
+        if (modelFiles.empty()) {
+            ImGui::TextDisabled("No .passet models found.");
+            ImGui::TextDisabled("Import via Asset Browser first.");
+        }
+        for (auto& path : modelFiles) {
+            std::string name = std::filesystem::path(path).filename().string();
+            if (ImGui::MenuItem(name.c_str())) {
+                std::string ismName = "ISM_" + std::filesystem::path(path).stem().string();
+                auto& obj = scene.AddObject(ismName, nullptr);
                 SceneInstancedMeshData imd;
-                imd.modelPath = pathStr;
+                imd.modelPath = path;
                 obj.instancedMesh = imd;
                 scene.Select(scene.GetObjects().size() - 1);
                 s_InstancedMeshNeedsRebuild = true;
@@ -609,21 +640,13 @@ void DrawInspector(Scene& scene, CommandHistory& history,
         ImGui::Text("Model: %s", imd.modelPath.empty() ? "(none)" : imd.modelPath.c_str());
         ImGui::SameLine();
         if (ImGui::SmallButton("Change...")) {
-            nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj,passet"}};
-            nfdu8char_t* outPath = nullptr;
-            if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
-                std::string pathStr(outPath);
-                NFD_FreePathU8(outPath);
-                std::string ext = std::filesystem::path(pathStr).extension().string();
-                for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-                if (ext != ".passet") {
-                    std::string passetPath = AssetImporter::ImportModelToProject(pathStr);
-                    if (!passetPath.empty()) pathStr = passetPath;
-                }
-                imd.modelPath = pathStr;
-                imd.instances.clear();
-                s_InstancedMeshNeedsRebuild = true;
-            }
+            ImGui::OpenPopup("##ChangeISMModel");
+        }
+        std::string pickedModel = PickModelPAsset("##ChangeISMModel");
+        if (!pickedModel.empty()) {
+            imd.modelPath = pickedModel;
+            imd.instances.clear();
+            s_InstancedMeshNeedsRebuild = true;
         }
 
         ImGui::Text("Instances: %d", static_cast<int>(imd.instances.size()));
