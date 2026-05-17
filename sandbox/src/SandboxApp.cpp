@@ -386,6 +386,10 @@ public:
             if (Puluo::Input::IsKeyPressed(Puluo::Key::R)) m_GizmoMode = Puluo::GizmoMode::Scale;
         }
 
+        // Toggle stats overlay
+        if (Puluo::Input::IsKeyPressed(Puluo::Key::F3))
+            m_ShowStatsOverlay = !m_ShowStatsOverlay;
+
         if (Puluo::Input::IsKeyPressed(Puluo::Key::Escape))
             Close();
     }
@@ -813,6 +817,8 @@ public:
                     }
                     ImGui::EndMenu();
                 }
+                ImGui::Separator();
+                ImGui::MenuItem("Stats Overlay", "F3", &m_ShowStatsOverlay);
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -899,16 +905,6 @@ public:
             m_GizmoWasUsing = isUsing;
         }
 
-        // FPS overlay in viewport top-left
-        {
-            ImGui::SetCursorScreenPos(ImVec2(vpMin.x + 8, vpMin.y + 8));
-            float fps = ImGui::GetIO().Framerate;
-            float ms = 1000.0f / fps;
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
-            ImGui::Text("%.1f FPS (%.2f ms)", fps, ms);
-            ImGui::PopStyleColor();
-        }
-
         ImGui::End(); // Viewport
         ImGui::PopStyleVar();
 
@@ -985,6 +981,9 @@ public:
         std::string browserImportPath;
         Puluo::DrawAssetBrowser(browserImportPath);
 
+        // Stats overlay (F3 to toggle)
+        Puluo::DrawStatsOverlay(&m_ShowStatsOverlay);
+
         Puluo::ImGuiLayer::EndFrame();
 
         // Handle model import (after ImGui frame to avoid ID conflicts)
@@ -1046,16 +1045,23 @@ private:
         nfdu8filteritem_t filters[] = {
             {"3D Models", "glb,gltf,fbx,obj"}
         };
-        nfdu8char_t* outPath = nullptr;
-        nfdresult_t result = NFD_OpenDialogU8(&outPath, filters, 1, nullptr);
+        const nfdpathset_t* pathSet = nullptr;
+        nfdresult_t result = NFD_OpenDialogMultipleU8(&pathSet, filters, 1, nullptr);
 
-        if (result == NFD_OKAY && outPath) {
-            // Import to project: external .glb → assets/models/xxx.passet
-            std::string passetPath = Puluo::AssetImporter::ImportModelToProject(outPath);
-            NFD_FreePathU8(outPath);
-            if (!passetPath.empty()) {
-                ImportModelFromPath(passetPath);
+        if (result == NFD_OKAY && pathSet) {
+            nfdpathsetsize_t count = 0;
+            NFD_PathSet_GetCount(pathSet, &count);
+            for (nfdpathsetsize_t i = 0; i < count; i++) {
+                nfdu8char_t* p = nullptr;
+                if (NFD_PathSet_GetPath(pathSet, i, &p) == NFD_OKAY && p) {
+                    std::string passetPath = Puluo::AssetImporter::ImportModelToProject(p);
+                    NFD_PathSet_FreePathU8(p);
+                    if (!passetPath.empty()) {
+                        ImportModelFromPath(passetPath);
+                    }
+                }
             }
+            NFD_PathSet_Free(pathSet);
         }
     }
 
@@ -1600,6 +1606,7 @@ private:
     bool m_ViewportHovered = false;
     bool m_ViewportFocused = false;
     bool m_GizmoWasUsing = false;
+    bool m_ShowStatsOverlay = true;
     Puluo::Transform m_GizmoStartTransform;
 };
 

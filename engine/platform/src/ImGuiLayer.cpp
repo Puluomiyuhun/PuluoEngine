@@ -40,20 +40,20 @@ static void DrawStar(ImDrawList* dl, float cx, float cy, float size, ImU32 col) 
     dl->AddConvexPolyFilled(pts, 10, col);
 }
 
-// Draw repeating cute pattern on the background layer
+// Draw repeating cute pattern on the foreground layer (over window bg, under nothing)
 void ImGuiLayer::DrawCuteBackground() {
-    ImDrawList* bg = ImGui::GetBackgroundDrawList();
+    ImDrawList* fg = ImGui::GetForegroundDrawList();
     ImVec2 displaySize = ImGui::GetIO().DisplaySize;
 
-    // Pattern colors — warm tones, clearly visible through semi-transparent panels
-    const ImU32 heartCol = IM_COL32(200, 110, 145, 80);  // rose hearts
-    const ImU32 starCol  = IM_COL32(170, 130, 195, 70);  // lavender stars
-    const ImU32 dotCol   = IM_COL32(195, 125, 160, 60);  // pink dots
+    // Pattern colors — soft, semi-transparent overlay
+    const ImU32 heartCol = IM_COL32(200, 110, 145, 30);  // rose hearts
+    const ImU32 starCol  = IM_COL32(170, 130, 195, 32);  // lavender stars — boosted
+    const ImU32 dotCol   = IM_COL32(195, 125, 160, 22);  // pink dots
 
-    const float spacing = 72.0f;
-    const float heartSize = 14.0f;
-    const float starSize  = 12.0f;
-    const float dotRadius = 3.5f;
+    const float spacing = 120.0f;
+    const float heartSize = 24.0f;
+    const float starSize  = 20.0f;
+    const float dotRadius = 4.0f;
 
     // Slow drift animation based on time
     double time = glfwGetTime();
@@ -67,11 +67,11 @@ void ImGuiLayer::DrawCuteBackground() {
         for (float x = -spacing + offsetX + rowShift; x < displaySize.x + spacing; x += spacing) {
             int pattern = (row + col) % 3;
             if (pattern == 0)
-                DrawHeart(bg, x, y, heartSize, heartCol);
+                DrawHeart(fg, x, y, heartSize, heartCol);
             else if (pattern == 1)
-                DrawStar(bg, x, y + 2.0f, starSize, starCol);
+                DrawStar(fg, x, y + 2.0f, starSize, starCol);
             else
-                bg->AddCircleFilled(ImVec2(x, y), dotRadius, dotCol, 8);
+                fg->AddCircleFilled(ImVec2(x, y), dotRadius, dotCol, 8);
             col++;
         }
         row++;
@@ -314,7 +314,7 @@ void ImGuiLayer::Init(GLFWwindow* window) {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     // ---- Font: Roboto (similar to UE5) ----
-    io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Medium.ttf", 15.0f);
+    io.Fonts->AddFontFromFileTTF("assets/fonts/Roboto-Medium.ttf", 17.0f);
 
     // Apply default theme
     ApplyTheme(EditorTheme::DarkSlate);
@@ -333,14 +333,13 @@ void ImGuiLayer::BeginFrame() {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-
-    // Draw cute background pattern for PinkCute theme
-    if (s_CurrentTheme == EditorTheme::PinkCute) {
-        DrawCuteBackground();
-    }
 }
 
 void ImGuiLayer::EndFrame() {
+    // Draw cute pattern overlay before Render() finalizes draw data
+    if (s_CurrentTheme == EditorTheme::PinkCute) {
+        DrawCuteBackground();
+    }
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }

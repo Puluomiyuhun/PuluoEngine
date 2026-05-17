@@ -707,11 +707,19 @@ void DrawInspector(Scene& scene, CommandHistory& history,
         if (terrain.IsCreated() && !imd.instances.empty()) {
             ImGui::SameLine();
             if (ImGui::Button("Snap to Terrain")) {
+                // Find terrain object's Y position (GetHeightAt returns height relative to terrain origin)
+                float terrainObjY = 0.0f;
+                for (auto& sceneObj : scene.GetObjects()) {
+                    if (sceneObj.terrain.has_value()) {
+                        terrainObjY = sceneObj.transform.position.y;
+                        break;
+                    }
+                }
                 Vec3 objPos = selected->transform.position;
                 for (auto& inst : imd.instances) {
                     float worldX = objPos.x + inst.position.x;
                     float worldZ = objPos.z + inst.position.z;
-                    float terrainY = terrain.GetHeightAt(worldX, worldZ);
+                    float terrainY = terrain.GetHeightAt(worldX, worldZ) + terrainObjY;
                     inst.position.y = terrainY - objPos.y;
                 }
                 s_InstancedMeshNeedsRebuild = true;
@@ -1211,28 +1219,44 @@ void DrawAssetBrowser(std::string& importPath) {
         ImGui::SameLine();
     }
 
-    // Import buttons
+    // Import buttons (multi-select)
     if (ImGui::Button("Import Model...")) {
         nfdu8filteritem_t filters[] = {{"3D Models", "glb,gltf,fbx,obj"}};
-        nfdu8char_t* outPath = nullptr;
-        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
-            std::string result = AssetImporter::ImportModelToProject(outPath);
-            if (!result.empty()) {
-                PULUO_CORE_INFO("Imported model to project: {}", result);
+        const nfdpathset_t* pathSet = nullptr;
+        if (NFD_OpenDialogMultipleU8(&pathSet, filters, 1, nullptr) == NFD_OKAY) {
+            nfdpathsetsize_t count = 0;
+            NFD_PathSet_GetCount(pathSet, &count);
+            for (nfdpathsetsize_t i = 0; i < count; i++) {
+                nfdu8char_t* p = nullptr;
+                if (NFD_PathSet_GetPath(pathSet, i, &p) == NFD_OKAY && p) {
+                    std::string result = AssetImporter::ImportModelToProject(p);
+                    if (!result.empty()) {
+                        PULUO_CORE_INFO("Imported model to project: {}", result);
+                    }
+                    NFD_PathSet_FreePathU8(p);
+                }
             }
-            NFD_FreePathU8(outPath);
+            NFD_PathSet_Free(pathSet);
         }
     }
     ImGui::SameLine();
     if (ImGui::Button("Import Texture...")) {
         nfdu8filteritem_t filters[] = {{"Textures", "png,jpg,jpeg,tga,bmp,hdr"}};
-        nfdu8char_t* outPath = nullptr;
-        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
-            std::string result = AssetImporter::ImportTextureToProject(outPath);
-            if (!result.empty()) {
-                PULUO_CORE_INFO("Imported texture to project: {}", result);
+        const nfdpathset_t* pathSet = nullptr;
+        if (NFD_OpenDialogMultipleU8(&pathSet, filters, 1, nullptr) == NFD_OKAY) {
+            nfdpathsetsize_t count = 0;
+            NFD_PathSet_GetCount(pathSet, &count);
+            for (nfdpathsetsize_t i = 0; i < count; i++) {
+                nfdu8char_t* p = nullptr;
+                if (NFD_PathSet_GetPath(pathSet, i, &p) == NFD_OKAY && p) {
+                    std::string result = AssetImporter::ImportTextureToProject(p);
+                    if (!result.empty()) {
+                        PULUO_CORE_INFO("Imported texture to project: {}", result);
+                    }
+                    NFD_PathSet_FreePathU8(p);
+                }
             }
-            NFD_FreePathU8(outPath);
+            NFD_PathSet_Free(pathSet);
         }
     }
 
@@ -1448,3 +1472,49 @@ void DrawAssetBrowser(std::string& importPath) {
 }
 
 } // namespace Puluo
+
+// ---- Stats Overlay (outside namespace, uses Puluo:: explicitly) ----
+void Puluo::DrawStatsOverlay(bool* open) {
+    if (!*open) return;
+
+    // Smoothed FPS via ring buffer
+    static float fpsHistory[60] = {};
+    static int   fpsIndex = 0;
+    static bool  fpsWarmedUp = false;
+
+    float rawFps = ImGui::GetIO().Framerate;
+    fpsHistory[fpsIndex] = rawFps;
+    fpsIndex = (fpsIndex + 1) % 60;
+    if (fpsIndex == 0) fpsWarmedUp = true;
+
+    int count = fpsWarmedUp ? 60 : fpsIndex;
+    float sum = 0.0f;
+    for (int i = 0; i < count; i++) sum += fpsHistory[i];
+    float avgFps = (count > 0) ? sum / (float)count : rawFps;
+    float avgMs  = 1000.0f / avgFps;
+
+    // Position: top-right of the main viewport
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImVec2 pos(vp->WorkPos.x + vp->WorkSize.x - 12.0f, vp->WorkPos.y + 12.0f);
+    ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.50f);
+
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoSavedSettings;
+
+    if (ImGui::Begin("##StatsOverlay", open, flags)) {
+        ImGui::Text("%.1f FPS  (%.2f ms)", avgFps, avgMs);
+        ImGui::Separator();
+        ImGui::Text("Draw Calls:  %u", Renderer::GetDrawCallCount());
+        ImGui::Text("Culled:      %u", Renderer::GetCulledCount());
+        ImGui::Text("Visible:     %u", Renderer::GetDrawCallCount() > 0
+            ? Renderer::GetDrawCallCount() : 0u);
+        // Triangle count — reserved for Agent C's Renderer::GetTriangleCount()
+        // ImGui::Text("Triangles:   %u", Renderer::GetTriangleCount());
+        ImGui::Text("Triangles:   N/A");
+    }
+    ImGui::End();
+}
