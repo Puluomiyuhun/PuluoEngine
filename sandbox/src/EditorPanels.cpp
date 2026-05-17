@@ -128,6 +128,49 @@ static void MaterialTexSlotUI(const char* label, std::shared_ptr<Texture2D>& tex
     ImGui::PopID();
 }
 
+// Overload: also records the loaded texture path for serialization
+static void MaterialTexSlotUI(const char* label, std::shared_ptr<Texture2D>& texSlot, std::string& pathOut) {
+    ImGui::PushID(label);
+    ImGui::Text("%s:", label);
+    ImGui::SameLine();
+    if (texSlot) {
+        auto texID = static_cast<ImTextureID>(static_cast<uintptr_t>(texSlot->GetRendererID()));
+        ImGui::Image(texID, ImVec2(32, 32));
+        ImGui::SameLine();
+        if (ImGui::SmallButton("X")) {
+            texSlot = nullptr;
+            pathOut.clear();
+        }
+    } else {
+        ImGui::Text("None");
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Browse")) {
+        nfdu8char_t* outPath = nullptr;
+        nfdu8filteritem_t filter = { "Image", "png,jpg,jpeg,tga,bmp,passet" };
+        nfdopendialogu8args_t args = {0};
+        args.filterList = &filter;
+        args.filterCount = 1;
+        if (NFD_OpenDialogU8_With(&outPath, &args) == NFD_OKAY) {
+            std::string pathStr(outPath);
+            NFD_FreePathU8(outPath);
+            std::string ext = std::filesystem::path(pathStr).extension().string();
+            for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (ext != ".passet") {
+                std::string passetPath = AssetImporter::ImportTextureToProject(pathStr);
+                if (!passetPath.empty()) pathStr = passetPath;
+            }
+            auto tex = TextureCache::Load(pathStr);
+            if (tex && tex->GetRendererID()) {
+                s_MaterialTextures.push_back(tex);
+                texSlot = tex;
+                pathOut = pathStr;
+            }
+        }
+    }
+    ImGui::PopID();
+}
+
 // Helper: show texture slot button
 static void TerrainTexSlotUI(const char* label, uint32_t& texID, std::string& texPath) {
     ImGui::PushID(label);
@@ -422,36 +465,38 @@ void DrawInspector(Scene& scene, CommandHistory& history,
         }
     }
 
-    // Material info (read-only)
+    // Material editing (syncs to materialOverrides for serialization)
     if (selected->model && ImGui::CollapsingHeader("Materials")) {
         auto& materials = selected->model->GetMutableMaterials();
         for (size_t i = 0; i < materials.size(); i++) {
             ImGui::PushID(static_cast<int>(i));
             if (ImGui::TreeNode("Material", "Material %d", static_cast<int>(i))) {
                 auto& mat = materials[i];
-                ImGui::ColorEdit3("Albedo", &mat.albedo.r);
-                ImGui::SliderFloat("Metallic", &mat.metallic, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Roughness", &mat.roughness, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("AO", &mat.ao, 0.0f, 1.0f, "%.2f");
+                auto& ovr = selected->materialOverrides[static_cast<int>(i)];
+
+                if (ImGui::ColorEdit3("Albedo", &mat.albedo.r)) ovr.albedo = mat.albedo;
+                if (ImGui::SliderFloat("Metallic", &mat.metallic, 0.0f, 1.0f, "%.2f")) ovr.metallic = mat.metallic;
+                if (ImGui::SliderFloat("Roughness", &mat.roughness, 0.0f, 1.0f, "%.2f")) ovr.roughness = mat.roughness;
+                if (ImGui::SliderFloat("AO", &mat.ao, 0.0f, 1.0f, "%.2f")) ovr.ao = mat.ao;
 
                 ImGui::Separator();
-                MaterialTexSlotUI("Albedo Map", mat.albedoMap);
-                MaterialTexSlotUI("Normal Map", mat.normalMap);
-                MaterialTexSlotUI("Metallic Map", mat.metallicMap);
-                MaterialTexSlotUI("Roughness Map", mat.roughnessMap);
-                MaterialTexSlotUI("AO Map", mat.aoMap);
+                MaterialTexSlotUI("Albedo Map", mat.albedoMap, ovr.albedoMapPath);
+                MaterialTexSlotUI("Normal Map", mat.normalMap, ovr.normalMapPath);
+                MaterialTexSlotUI("Metallic Map", mat.metallicMap, ovr.metallicMapPath);
+                MaterialTexSlotUI("Roughness Map", mat.roughnessMap, ovr.roughnessMapPath);
+                MaterialTexSlotUI("AO Map", mat.aoMap, ovr.aoMapPath);
 
                 ImGui::Separator();
-                ImGui::Checkbox("Alpha Mask", &mat.useAlphaMask);
+                if (ImGui::Checkbox("Alpha Mask", &mat.useAlphaMask)) ovr.useAlphaMask = mat.useAlphaMask;
                 if (mat.useAlphaMask) {
-                    MaterialTexSlotUI("Mask Map", mat.maskMap);
-                    ImGui::SliderFloat("Alpha Cutoff", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f");
+                    MaterialTexSlotUI("Mask Map", mat.maskMap, ovr.maskMapPath);
+                    if (ImGui::SliderFloat("Alpha Cutoff", &mat.alphaCutoff, 0.0f, 1.0f, "%.2f")) ovr.alphaCutoff = mat.alphaCutoff;
                 }
 
-                ImGui::Checkbox("SSS", &mat.useSSS);
+                if (ImGui::Checkbox("SSS", &mat.useSSS)) ovr.useSSS = mat.useSSS;
                 if (mat.useSSS) {
-                    ImGui::ColorEdit3("SSS Color", &mat.sssColor.r);
-                    ImGui::SliderFloat("SSS Strength", &mat.sssStrength, 0.0f, 2.0f, "%.2f");
+                    if (ImGui::ColorEdit3("SSS Color", &mat.sssColor.r)) ovr.sssColor = mat.sssColor;
+                    if (ImGui::SliderFloat("SSS Strength", &mat.sssStrength, 0.0f, 2.0f, "%.2f")) ovr.sssStrength = mat.sssStrength;
                 }
 
                 ImGui::TreePop();
@@ -633,6 +678,21 @@ void DrawInspector(Scene& scene, CommandHistory& history,
                 imd.instances.push_back(t);
             }
             s_InstancedMeshNeedsRebuild = true;
+        }
+
+        // Snap all instances to terrain surface
+        if (terrain.IsCreated() && !imd.instances.empty()) {
+            ImGui::SameLine();
+            if (ImGui::Button("Snap to Terrain")) {
+                Vec3 objPos = selected->transform.position;
+                for (auto& inst : imd.instances) {
+                    float worldX = objPos.x + inst.position.x;
+                    float worldZ = objPos.z + inst.position.z;
+                    float terrainY = terrain.GetHeightAt(worldX, worldZ);
+                    inst.position.y = terrainY - objPos.y;
+                }
+                s_InstancedMeshNeedsRebuild = true;
+            }
         }
 
         // Instance list (collapsible, for manual editing)
@@ -833,17 +893,17 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
     bool isRotate = (mode == GizmoMode::Rotate);
     bool isScale = (mode == GizmoMode::Scale);
 
-    if (isTranslate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+    if (isTranslate) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_SliderGrab]);
     if (ImGui::Button("Translate (W)")) mode = GizmoMode::Translate;
     if (isTranslate) ImGui::PopStyleColor();
 
     ImGui::SameLine();
-    if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+    if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_SliderGrab]);
     if (ImGui::Button("Rotate (E)")) mode = GizmoMode::Rotate;
     if (isRotate) ImGui::PopStyleColor();
 
     ImGui::SameLine();
-    if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.8f, 1.0f));
+    if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyle().Colors[ImGuiCol_SliderGrab]);
     if (ImGui::Button("Scale (R)")) mode = GizmoMode::Scale;
     if (isScale) ImGui::PopStyleColor();
 
