@@ -24,6 +24,14 @@ std::string ModelCache::NormalizePath(const std::string& path) {
     return result;
 }
 
+// Returns true for relative paths only (absolute paths like D:/... or /... are not cacheable)
+static bool IsRelativePath(const std::string& path) {
+    if (path.empty()) return false;
+    if (path[0] == '/') return false;
+    if (path.size() >= 2 && path[1] == ':') return false;
+    return true;
+}
+
 std::shared_ptr<Model> ModelCache::Load(const std::string& path) {
     std::string key = NormalizePath(path);
 
@@ -39,8 +47,10 @@ std::shared_ptr<Model> ModelCache::Load(const std::string& path) {
 
     std::shared_ptr<Model> model;
 
-    // Try .passet binary cache (skip for files that are already .passet)
-    if (key.size() < 7 || key.substr(key.size() - 7) != ".passet") {
+    // Try .passet binary cache (only for relative project paths, skip .passet files)
+    bool canDiskCache = IsRelativePath(key) &&
+                        (key.size() < 7 || key.substr(key.size() - 7) != ".passet");
+    if (canDiskCache) {
         std::string cachePath = AssetImporter::GetCachePath(key);
 
         bool cacheValid = false;
@@ -72,8 +82,8 @@ std::shared_ptr<Model> ModelCache::Load(const std::string& path) {
     s_Cache[key] = model;
     PULUO_CORE_INFO("ModelCache miss, loaded: {}", key);
 
-    // Auto-generate .passet cache for next time (fire-and-forget)
-    if (key.size() >= 4) {
+    // Auto-generate .passet cache for next time (only relative project paths)
+    if (canDiskCache && key.size() >= 4) {
         std::string ext = key.substr(key.size() - 4);
         // Only cache known model formats
         if (ext == ".glb" || ext == "gltf" || ext == ".fbx" || ext == ".obj") {

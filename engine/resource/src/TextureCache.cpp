@@ -1,7 +1,10 @@
 #include "puluo/resource/TextureCache.h"
+#include "puluo/resource/AssetImporter.h"
+#include "puluo/resource/AssetLoader.h"
 #include "puluo/core/Log.h"
 
 #include <algorithm>
+#include <filesystem>
 
 namespace Puluo {
 
@@ -21,6 +24,14 @@ std::string TextureCache::NormalizePath(const std::string& path) {
     return result;
 }
 
+// Returns true for relative paths only (absolute paths like D:/... or /... are not cacheable)
+static bool IsRelativePath(const std::string& path) {
+    if (path.empty()) return false;
+    if (path[0] == '/') return false;
+    if (path.size() >= 2 && path[1] == ':') return false; // Windows drive letter
+    return true;
+}
+
 std::shared_ptr<Texture2D> TextureCache::Load(const std::string& path) {
     std::string key = NormalizePath(path);
 
@@ -34,6 +45,31 @@ std::shared_ptr<Texture2D> TextureCache::Load(const std::string& path) {
         s_Cache.erase(it);
     }
 
+    // Try .passet binary cache (only for relative project paths, skip .passet files)
+    bool canDiskCache = IsRelativePath(key) &&
+                        (key.size() < 7 || key.substr(key.size() - 7) != ".passet");
+    if (canDiskCache) {
+        std::string cachePath = AssetImporter::GetCachePath(key);
+
+        bool cacheValid = false;
+        if (std::filesystem::exists(cachePath) && std::filesystem::exists(key)) {
+            auto cacheTime = std::filesystem::last_write_time(cachePath);
+            auto sourceTime = std::filesystem::last_write_time(key);
+            cacheValid = (cacheTime >= sourceTime);
+        }
+
+        if (cacheValid) {
+            auto texture = AssetLoader::LoadTexture(cachePath);
+            if (texture) {
+                s_Cache[key] = texture;
+                PULUO_CORE_INFO("TextureCache: loaded from .passet cache: {}", cachePath);
+                return texture;
+            }
+            PULUO_CORE_WARN("TextureCache: .passet cache invalid, falling back to original: {}", key);
+        }
+    }
+
+    // Original stbi load
     auto texture = std::make_shared<Texture2D>(path);
     if (texture->GetRendererID() == 0) {
         return nullptr;
@@ -41,6 +77,20 @@ std::shared_ptr<Texture2D> TextureCache::Load(const std::string& path) {
 
     s_Cache[key] = texture;
     PULUO_CORE_INFO("TextureCache miss, loaded: {}", key);
+
+    // Auto-generate .passet cache for next time (only relative project paths)
+    if (canDiskCache && key.size() >= 4) {
+        std::string ext = key.substr(key.rfind('.'));
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" ||
+            ext == ".tga" || ext == ".bmp" || ext == ".hdr") {
+            std::string cachePath = AssetImporter::ImportTexture(key);
+            if (!cachePath.empty()) {
+                PULUO_CORE_INFO("TextureCache: generated .passet cache: {}", cachePath);
+            }
+        }
+    }
+
     return texture;
 }
 

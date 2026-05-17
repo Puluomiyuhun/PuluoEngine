@@ -136,6 +136,50 @@ std::string AssetImporter::GetCachePath(const std::string& sourcePath, const std
     return cacheDir + "/" + subpath + ".passet";
 }
 
+std::string AssetImporter::ImportTexture(const std::string& sourcePath, const std::string& cacheDir) {
+    stbi_set_flip_vertically_on_load(1);
+
+    int w, h, ch;
+    unsigned char* px = stbi_load(sourcePath.c_str(), &w, &h, &ch, 0);
+    if (!px) {
+        PULUO_CORE_ERROR("AssetImporter: stbi_load failed for '{}'", sourcePath);
+        return "";
+    }
+
+    size_t pixelSize = static_cast<size_t>(w) * h * ch;
+
+    std::string outPath = GetCachePath(sourcePath, cacheDir);
+    std::filesystem::create_directories(std::filesystem::path(outPath).parent_path());
+
+    std::ofstream file(outPath, std::ios::binary);
+    if (!file.is_open()) {
+        stbi_image_free(px);
+        PULUO_CORE_ERROR("AssetImporter: Cannot write '{}'", outPath);
+        return "";
+    }
+
+    // Header
+    PAssetHeader header;
+    header.type = static_cast<uint32_t>(PAssetType::Texture);
+    WriteVal(file, header);
+
+    // Texture entry + raw pixels
+    PAssetTextureEntry entry;
+    entry.width = static_cast<uint32_t>(w);
+    entry.height = static_cast<uint32_t>(h);
+    entry.channels = static_cast<uint32_t>(ch);
+    entry.dataSize = static_cast<uint32_t>(pixelSize);
+    WriteVal(file, entry);
+    WriteBytes(file, px, pixelSize);
+
+    stbi_image_free(px);
+    file.close();
+
+    PULUO_CORE_INFO("AssetImporter: Exported texture '{}' -> '{}' ({}x{}, {} ch)",
+                    sourcePath, outPath, w, h, ch);
+    return outPath;
+}
+
 std::string AssetImporter::Import(const std::string& sourcePath, const std::string& cacheDir) {
     // Parse model with Assimp
     Assimp::Importer importer;

@@ -75,7 +75,49 @@ std::shared_ptr<Texture2D> AssetLoader::CreateTextureFromRaw(
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Public API — Standalone Texture
+// ---------------------------------------------------------------------------
+std::shared_ptr<Texture2D> AssetLoader::LoadTexture(const std::string& passetPath) {
+    std::ifstream file(passetPath, std::ios::binary);
+    if (!file.is_open()) {
+        PULUO_CORE_ERROR("AssetLoader: Cannot open '{}'", passetPath);
+        return nullptr;
+    }
+
+    PAssetHeader header;
+    if (!ReadVal(file, header)) return nullptr;
+    if (header.magic != PASSET_MAGIC || header.version != PASSET_VERSION) {
+        PULUO_CORE_ERROR("AssetLoader: Invalid .passet header in '{}'", passetPath);
+        return nullptr;
+    }
+    if (header.type != static_cast<uint32_t>(PAssetType::Texture)) {
+        PULUO_CORE_ERROR("AssetLoader: '{}' is not a Texture asset", passetPath);
+        return nullptr;
+    }
+
+    PAssetTextureEntry entry;
+    if (!ReadVal(file, entry)) return nullptr;
+
+    std::vector<unsigned char> pixels(entry.dataSize);
+    if (entry.dataSize > 0) {
+        if (!ReadBytes(file, pixels.data(), entry.dataSize)) return nullptr;
+    }
+
+    auto tex = CreateTextureFromRaw(
+        static_cast<int>(entry.width),
+        static_cast<int>(entry.height),
+        static_cast<int>(entry.channels),
+        pixels.data());
+
+    if (tex) {
+        PULUO_CORE_INFO("AssetLoader: Loaded texture '{}' ({}x{}, {} ch)",
+                        passetPath, entry.width, entry.height, entry.channels);
+    }
+    return tex;
+}
+
+// ---------------------------------------------------------------------------
+// Public API — Model
 // ---------------------------------------------------------------------------
 std::shared_ptr<Model> AssetLoader::LoadModel(const std::string& passetPath) {
     std::ifstream file(passetPath, std::ios::binary);
