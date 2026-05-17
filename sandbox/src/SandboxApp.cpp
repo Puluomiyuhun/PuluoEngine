@@ -788,7 +788,8 @@ public:
         bool wantsImport = false;
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Save Scene...", "Ctrl+S")) SaveScene();
+                if (ImGui::MenuItem("Save Scene", "Ctrl+S")) SaveScene();
+                if (ImGui::MenuItem("Save Scene As...")) SaveSceneAs();
                 if (ImGui::MenuItem("Load Scene...", "Ctrl+O")) LoadScene();
                 ImGui::Separator();
                 if (ImGui::MenuItem("Import Model...", "Ctrl+I")) {
@@ -1151,120 +1152,135 @@ private:
         }
     }
 
+    void SaveSceneToPath(const std::string& savePath) {
+        // Sync terrain runtime data back to scene object before serialization
+        for (auto& obj : m_Scene.GetObjects()) {
+            if (obj.terrain.has_value()) {
+                auto& td = obj.terrain.value();
+                td.created = m_Terrain.IsCreated();
+                td.worldSize = m_TerrainParams.worldSize;
+                td.heightmapRes = m_TerrainParams.heightmapRes;
+                td.patchCount = m_TerrainParams.patchCount;
+                td.heightScale = m_TerrainParams.heightScale;
+                td.uvScale = m_TerrainParams.uvScale;
+                // Sync three-layer material paths
+                auto syncLayer = [](Puluo::SceneTerrainLayerPaths& dst, const Puluo::TerrainLayerMaterial& src) {
+                    dst.albedoPath = src.albedoPath;
+                    dst.normalPath = src.normalPath;
+                    dst.roughnessPath = src.roughnessPath;
+                };
+                syncLayer(td.lower, m_TerrainMaterial.lower);
+                syncLayer(td.upper, m_TerrainMaterial.upper);
+                syncLayer(td.slope, m_TerrainMaterial.slope);
+                td.heightThreshold = m_TerrainMaterial.heightThreshold;
+                td.slopeThreshold = m_TerrainMaterial.slopeThreshold;
+                td.blendSharpness = m_TerrainMaterial.blendSharpness;
+                // Save splat map if present
+                if (m_Terrain.HasSplatMap()) {
+                    std::filesystem::path scenePath(savePath);
+                    std::string splatPath = (scenePath.parent_path() / (scenePath.stem().string() + "_splatmap.png")).string();
+                    m_Terrain.SaveSplatMap(splatPath);
+                    td.splatMapPath = splatPath;
+                }
+                break;
+            }
+        }
+
+        nlohmann::json j = m_Scene.ToJson();
+
+        // Environment settings
+        nlohmann::json env;
+
+        // Atmosphere
+        {
+            auto& a = m_AtmosphereParams;
+            env["atmosphere"]["enabled"] = m_UseAtmosphere;
+            env["atmosphere"]["sunDirection"] = {a.sunDirection.x, a.sunDirection.y, a.sunDirection.z};
+            env["atmosphere"]["sunIntensity"] = a.sunIntensity;
+            env["atmosphere"]["turbidity"] = a.turbidity;
+            env["atmosphere"]["rayleighCoeff"] = {a.rayleighCoeff.x, a.rayleighCoeff.y, a.rayleighCoeff.z};
+            env["atmosphere"]["mieCoeff"] = a.mieCoeff;
+            env["atmosphere"]["mieDirectionG"] = a.mieDirectionG;
+        }
+
+        // Fog
+        {
+            auto& f = m_FogParams;
+            env["fog"]["enabled"] = f.enabled;
+            env["fog"]["density"] = f.density;
+            env["fog"]["heightFalloff"] = f.heightFalloff;
+            env["fog"]["maxOpacity"] = f.maxOpacity;
+            env["fog"]["fogColor"] = {f.fogColor.x, f.fogColor.y, f.fogColor.z};
+            env["fog"]["startDistance"] = f.startDistance;
+            env["fog"]["dirInscatterColor"] = {f.directionalInscatteringColor.x, f.directionalInscatteringColor.y, f.directionalInscatteringColor.z};
+            env["fog"]["dirInscatterExp"] = f.directionalInscatteringExponent;
+            env["fog"]["dirInscatterStartDist"] = f.directionalInscatteringStartDistance;
+        }
+
+        // Cloud
+        {
+            auto& c = m_CloudParams;
+            env["cloud"]["enabled"] = c.enabled;
+            env["cloud"]["layerBottom"] = c.cloudLayerBottom;
+            env["cloud"]["layerThickness"] = c.cloudLayerThickness;
+            env["cloud"]["coverage"] = c.coverage;
+            env["cloud"]["density"] = c.density;
+            env["cloud"]["detailScale"] = c.detailScale;
+            env["cloud"]["baseScale"] = c.baseScale;
+            env["cloud"]["windSpeed"] = c.windSpeed;
+            env["cloud"]["windDirection"] = {c.windDirection.x, c.windDirection.y, c.windDirection.z};
+            env["cloud"]["phaseG"] = c.phaseG;
+            env["cloud"]["powderStrength"] = c.powderStrength;
+            env["cloud"]["ambientColor"] = {c.ambientColor.x, c.ambientColor.y, c.ambientColor.z};
+            env["cloud"]["ambientStrength"] = c.ambientStrength;
+        }
+
+        // SSR
+        {
+            env["ssr"]["enabled"] = m_SSRConfig.enabled;
+            env["ssr"]["maxSteps"] = m_SSRConfig.maxSteps;
+            env["ssr"]["maxDistance"] = m_SSRConfig.maxDistance;
+            env["ssr"]["thickness"] = m_SSRConfig.thickness;
+        }
+
+        // Camera
+        {
+            auto& pos = m_Camera.GetPosition();
+            env["camera"]["position"] = {pos.x, pos.y, pos.z};
+            env["camera"]["yaw"] = m_Camera.GetYaw();
+            env["camera"]["pitch"] = m_Camera.GetPitch();
+            env["camera"]["moveSpeed"] = m_Camera.GetMoveSpeed();
+            env["camera"]["sensitivity"] = m_Camera.GetMouseSensitivity();
+            env["camera"]["fov"] = m_Camera.GetFov();
+        }
+
+        j["environment"] = env;
+
+        std::ofstream file(savePath);
+        if (file.is_open()) {
+            file << j.dump(2);
+            m_CurrentScenePath = savePath;
+            PULUO_INFO("Scene saved: {0}", savePath);
+        } else {
+            PULUO_CORE_ERROR("Failed to save scene: {0}", savePath);
+        }
+    }
+
     void SaveScene() {
+        if (!m_CurrentScenePath.empty()) {
+            // Quick save to current file
+            SaveSceneToPath(m_CurrentScenePath);
+        } else {
+            SaveSceneAs();
+        }
+    }
+
+    void SaveSceneAs() {
+        std::string defaultDir = std::filesystem::absolute("assets").string();
         nfdu8filteritem_t filters[] = {{"Scene Files", "pscene"}};
         nfdu8char_t* outPath = nullptr;
-        if (NFD_SaveDialogU8(&outPath, filters, 1, "assets", "untitled.pscene") == NFD_OKAY && outPath) {
-            // Sync terrain runtime data back to scene object before serialization
-            for (auto& obj : m_Scene.GetObjects()) {
-                if (obj.terrain.has_value()) {
-                    auto& td = obj.terrain.value();
-                    td.created = m_Terrain.IsCreated();
-                    td.worldSize = m_TerrainParams.worldSize;
-                    td.heightmapRes = m_TerrainParams.heightmapRes;
-                    td.patchCount = m_TerrainParams.patchCount;
-                    td.heightScale = m_TerrainParams.heightScale;
-                    td.uvScale = m_TerrainParams.uvScale;
-                    // Sync three-layer material paths
-                    auto syncLayer = [](Puluo::SceneTerrainLayerPaths& dst, const Puluo::TerrainLayerMaterial& src) {
-                        dst.albedoPath = src.albedoPath;
-                        dst.normalPath = src.normalPath;
-                        dst.roughnessPath = src.roughnessPath;
-                    };
-                    syncLayer(td.lower, m_TerrainMaterial.lower);
-                    syncLayer(td.upper, m_TerrainMaterial.upper);
-                    syncLayer(td.slope, m_TerrainMaterial.slope);
-                    td.heightThreshold = m_TerrainMaterial.heightThreshold;
-                    td.slopeThreshold = m_TerrainMaterial.slopeThreshold;
-                    td.blendSharpness = m_TerrainMaterial.blendSharpness;
-                    // Save splat map if present
-                    if (m_Terrain.HasSplatMap()) {
-                        std::filesystem::path scenePath(outPath);
-                        std::string splatPath = (scenePath.parent_path() / (scenePath.stem().string() + "_splatmap.png")).string();
-                        m_Terrain.SaveSplatMap(splatPath);
-                        td.splatMapPath = splatPath;
-                    }
-                    break;
-                }
-            }
-
-            nlohmann::json j = m_Scene.ToJson();
-
-            // Environment settings
-            nlohmann::json env;
-
-            // Atmosphere
-            {
-                auto& a = m_AtmosphereParams;
-                env["atmosphere"]["enabled"] = m_UseAtmosphere;
-                env["atmosphere"]["sunDirection"] = {a.sunDirection.x, a.sunDirection.y, a.sunDirection.z};
-                env["atmosphere"]["sunIntensity"] = a.sunIntensity;
-                env["atmosphere"]["turbidity"] = a.turbidity;
-                env["atmosphere"]["rayleighCoeff"] = {a.rayleighCoeff.x, a.rayleighCoeff.y, a.rayleighCoeff.z};
-                env["atmosphere"]["mieCoeff"] = a.mieCoeff;
-                env["atmosphere"]["mieDirectionG"] = a.mieDirectionG;
-            }
-
-            // Fog
-            {
-                auto& f = m_FogParams;
-                env["fog"]["enabled"] = f.enabled;
-                env["fog"]["density"] = f.density;
-                env["fog"]["heightFalloff"] = f.heightFalloff;
-                env["fog"]["maxOpacity"] = f.maxOpacity;
-                env["fog"]["fogColor"] = {f.fogColor.x, f.fogColor.y, f.fogColor.z};
-                env["fog"]["startDistance"] = f.startDistance;
-                env["fog"]["dirInscatterColor"] = {f.directionalInscatteringColor.x, f.directionalInscatteringColor.y, f.directionalInscatteringColor.z};
-                env["fog"]["dirInscatterExp"] = f.directionalInscatteringExponent;
-                env["fog"]["dirInscatterStartDist"] = f.directionalInscatteringStartDistance;
-            }
-
-            // Cloud
-            {
-                auto& c = m_CloudParams;
-                env["cloud"]["enabled"] = c.enabled;
-                env["cloud"]["layerBottom"] = c.cloudLayerBottom;
-                env["cloud"]["layerThickness"] = c.cloudLayerThickness;
-                env["cloud"]["coverage"] = c.coverage;
-                env["cloud"]["density"] = c.density;
-                env["cloud"]["detailScale"] = c.detailScale;
-                env["cloud"]["baseScale"] = c.baseScale;
-                env["cloud"]["windSpeed"] = c.windSpeed;
-                env["cloud"]["windDirection"] = {c.windDirection.x, c.windDirection.y, c.windDirection.z};
-                env["cloud"]["phaseG"] = c.phaseG;
-                env["cloud"]["powderStrength"] = c.powderStrength;
-                env["cloud"]["ambientColor"] = {c.ambientColor.x, c.ambientColor.y, c.ambientColor.z};
-                env["cloud"]["ambientStrength"] = c.ambientStrength;
-            }
-
-            // SSR
-            {
-                env["ssr"]["enabled"] = m_SSRConfig.enabled;
-                env["ssr"]["maxSteps"] = m_SSRConfig.maxSteps;
-                env["ssr"]["maxDistance"] = m_SSRConfig.maxDistance;
-                env["ssr"]["thickness"] = m_SSRConfig.thickness;
-            }
-
-            // Camera
-            {
-                auto& pos = m_Camera.GetPosition();
-                env["camera"]["position"] = {pos.x, pos.y, pos.z};
-                env["camera"]["yaw"] = m_Camera.GetYaw();
-                env["camera"]["pitch"] = m_Camera.GetPitch();
-                env["camera"]["moveSpeed"] = m_Camera.GetMoveSpeed();
-                env["camera"]["sensitivity"] = m_Camera.GetMouseSensitivity();
-                env["camera"]["fov"] = m_Camera.GetFov();
-            }
-
-            j["environment"] = env;
-
-            std::ofstream file(outPath);
-            if (file.is_open()) {
-                file << j.dump(2);
-                PULUO_INFO("Scene saved: {0}", outPath);
-            } else {
-                PULUO_CORE_ERROR("Failed to save scene: {0}", outPath);
-            }
+        if (NFD_SaveDialogU8(&outPath, filters, 1, defaultDir.c_str(), "untitled.pscene") == NFD_OKAY && outPath) {
+            SaveSceneToPath(outPath);
             NFD_FreePathU8(outPath);
         }
     }
@@ -1553,13 +1569,15 @@ private:
             }
         }
 
+        m_CurrentScenePath = path;
         PULUO_INFO("Scene loaded: {0}", path);
     }
 
     void LoadScene() {
+        std::string defaultDir = std::filesystem::absolute("assets").string();
         nfdu8filteritem_t filters[] = {{"Scene Files", "pscene"}};
         nfdu8char_t* outPath = nullptr;
-        if (NFD_OpenDialogU8(&outPath, filters, 1, "assets") == NFD_OKAY && outPath) {
+        if (NFD_OpenDialogU8(&outPath, filters, 1, defaultDir.c_str()) == NFD_OKAY && outPath) {
             LoadSceneFromPath(outPath);
             NFD_FreePathU8(outPath);
         }
@@ -1656,6 +1674,7 @@ private:
     Puluo::Scene m_Scene;
     Puluo::CommandHistory m_CommandHistory;
     Puluo::GizmoMode m_GizmoMode = Puluo::GizmoMode::Translate;
+    std::string m_CurrentScenePath;  // Path of currently open scene (empty = unsaved)
     bool m_FirstFrame = true;
     bool m_ViewportHovered = false;
     bool m_ViewportFocused = false;
