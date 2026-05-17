@@ -1154,7 +1154,7 @@ private:
     void SaveScene() {
         nfdu8filteritem_t filters[] = {{"Scene Files", "pscene"}};
         nfdu8char_t* outPath = nullptr;
-        if (NFD_SaveDialogU8(&outPath, filters, 1, nullptr, "untitled.pscene") == NFD_OKAY && outPath) {
+        if (NFD_SaveDialogU8(&outPath, filters, 1, "assets", "untitled.pscene") == NFD_OKAY && outPath) {
             // Sync terrain runtime data back to scene object before serialization
             for (auto& obj : m_Scene.GetObjects()) {
                 if (obj.terrain.has_value()) {
@@ -1559,7 +1559,7 @@ private:
     void LoadScene() {
         nfdu8filteritem_t filters[] = {{"Scene Files", "pscene"}};
         nfdu8char_t* outPath = nullptr;
-        if (NFD_OpenDialogU8(&outPath, filters, 1, nullptr) == NFD_OKAY && outPath) {
+        if (NFD_OpenDialogU8(&outPath, filters, 1, "assets") == NFD_OKAY && outPath) {
             LoadSceneFromPath(outPath);
             NFD_FreePathU8(outPath);
         }
