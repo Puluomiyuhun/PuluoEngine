@@ -48,8 +48,11 @@ void PostProcessPass::Execute(RenderContext& ctx) {
         Vec2(1.0f / static_cast<float>(fbSpec.width),
              1.0f / static_cast<float>(fbSpec.height)));
 
+    // Use TAA output if available, otherwise use sceneFB
+    uint32_t sceneColor = ctx.taaOutputTexture ? ctx.taaOutputTexture
+                                                : ctx.sceneFB->GetColorAttachmentID();
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, ctx.sceneFB->GetColorAttachmentID());
+    glBindTexture(GL_TEXTURE_2D, sceneColor);
 
     // SSR composite
     ctx.fxaaShader->SetInt("uSSREnabled", ssrActive ? 1 : 0);

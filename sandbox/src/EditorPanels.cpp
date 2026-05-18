@@ -997,7 +997,7 @@ void DrawInspector(Scene& scene, CommandHistory& history,
 void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                  bool& useAtmosphere, AtmosphereParams& atmosphereParams,
                  FogParams& fogParams, CloudParams& cloudParams,
-                 int& aaMode, float& saturation, float& contrast,
+                 bool& taaEnabled, int& spatialAAMode, float& saturation, float& contrast,
                  SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
                  WeatherConfig& weatherConfig) {
     ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoCollapse);
@@ -1178,8 +1178,9 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
 
     // ---- Post Processing ----
     if (ImGui::CollapsingHeader("Post Processing")) {
-        const char* aaItems[] = { "None", "FXAA", "MSAA 4x" };
-        ImGui::Combo("Anti-Aliasing", &aaMode, aaItems, IM_ARRAYSIZE(aaItems));
+        ImGui::Checkbox("TAA", &taaEnabled);
+        const char* spatialItems[] = { "None", "FXAA", "MSAA 4x" };
+        ImGui::Combo("Spatial AA", &spatialAAMode, spatialItems, IM_ARRAYSIZE(spatialItems));
         ImGui::SliderFloat("Saturation", &saturation, 0.0f, 2.0f, "%.2f");
         ImGui::SliderFloat("Contrast", &contrast, 0.5f, 2.0f, "%.2f");
 
@@ -1241,7 +1242,12 @@ bool DrawGizmo(SceneObject& object, const Mat4& view, const Mat4& projection,
     );
 
     if (manipulated) {
-        object.transform.FromMatrix(matrix);
+        // Use ImGuizmo's own decompose — stable round-trip, avoids glm::decompose quirks
+        float translation[3], rotation[3], scaleArr[3];
+        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(matrix), translation, rotation, scaleArr);
+        object.transform.position = Vec3(translation[0], translation[1], translation[2]);
+        object.transform.scale = Vec3(scaleArr[0], scaleArr[1], scaleArr[2]);
+        object.transform.SetEulerDegrees(Vec3(rotation[0], rotation[1], rotation[2]));
     }
 
     return manipulated;

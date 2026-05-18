@@ -28,6 +28,7 @@
 #include "puluo/renderer/WeatherSystem.h"
 #include "puluo/renderer/InstancedMesh.h"
 #include "puluo/renderer/SSR.h"
+#include "puluo/renderer/TAA.h"
 #include "puluo/renderer/ShadowPass.h"
 #include "puluo/renderer/DepthPrepass.h"
 #include "puluo/renderer/SSAOPass.h"
@@ -154,6 +155,10 @@ public:
         // SSR
         m_SSR = std::make_unique<Puluo::SSR>();
         m_SSR->Create(1920, 1080);
+
+        // TAA
+        m_TAA = std::make_unique<Puluo::TAA>();
+        m_TAA->Create(1920, 1080);
 
         // Water shader and mesh
         m_WaterShader = Puluo::Shader::CreateFromFile("assets/shaders/water.vert",
@@ -400,6 +405,34 @@ public:
         int winW = GetWindow().GetWidth();
         int winH = GetWindow().GetHeight();
         if (winW <= 0 || winH <= 0) return;
+
+        // ---- TAA Jitter (Halton sequence) ----
+        // Halton(2,3) generates 16-frame cycle of sub-pixel offsets
+        auto Halton = [](int index, int base) -> float {
+            float result = 0.0f;
+            float f = 1.0f / base;
+            int i = index;
+            while (i > 0) {
+                result += f * (i % base);
+                i /= base;
+                f /= base;
+            }
+            return result;
+        };
+
+        // Get viewport size from scene framebuffer
+        auto& fbSpec = m_SceneFB->GetSpec();
+        float fbWidth = static_cast<float>(fbSpec.width);
+        float fbHeight = static_cast<float>(fbSpec.height);
+
+        if (m_TAAEnabled && fbWidth > 0 && fbHeight > 0) {
+            int idx = m_FrameCount % 16;
+            float jx = (Halton(idx + 1, 2) - 0.5f) * 2.0f / fbWidth;
+            float jy = (Halton(idx + 1, 3) - 0.5f) * 2.0f / fbHeight;
+            m_Camera.SetJitter(jx, jy);
+        } else {
+            m_Camera.ClearJitter();
+        }
 
         // (Atmosphere sun is injected as directional light during LightManager rebuild below)
 
@@ -719,6 +752,20 @@ public:
         m_SceneFB->Resolve();  // Resolve MSAA before post-process reads the texture
         m_SceneFB->Unbind();
 
+        // ---- TAA Resolve ----
+        if (m_TAAEnabled && m_TAA && m_TAA->IsCreated()) {
+            Puluo::Mat4 currentVP = m_Camera.GetProjectionMatrixJittered() * m_Camera.GetViewMatrix();
+            m_TAA->Resolve(
+                m_SceneFB->GetColorAttachmentID(),
+                m_DepthPrepassFB->GetDepthAttachmentID(),
+                currentVP,
+                m_PrevViewProjection,
+                m_Camera.GetJitter(),
+                m_Camera.GetPrevJitter(),
+                m_EmptyVAO);
+            m_PrevViewProjection = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
+        }
+
         // ---- Post-process (SSR + FXAA) ----
         {
             m_RenderCtx.sceneFB = m_SceneFB.get();
@@ -729,9 +776,14 @@ public:
             m_RenderCtx.fxaaEnabled = m_FXAAEnabled;
             m_RenderCtx.saturation = m_Saturation;
             m_RenderCtx.contrast = m_Contrast;
+            m_RenderCtx.taaEnabled = m_TAAEnabled;
+            m_RenderCtx.taaOutputTexture = (m_TAAEnabled && m_TAA && m_TAA->IsCreated())
+                                            ? m_TAA->GetOutputTexture() : 0;
 
             m_PostProcessPass.Run(m_RenderCtx);
         }
+
+        m_FrameCount++;
 
         // ---- Clear default framebuffer ----
         Puluo::RenderCommand::SetClearColor({0.1f, 0.1f, 0.1f, 1.0f});
@@ -844,8 +896,8 @@ public:
 
         // Sync AA mode to FBO settings
         {
-            uint32_t desiredSamples = (m_AAMode == 2) ? 4 : 1;
-            m_FXAAEnabled = (m_AAMode >= 1);  // FXAA on for both FXAA and MSAA modes
+            uint32_t desiredSamples = (m_SpatialAAMode == 2) ? 4 : 1;
+            m_FXAAEnabled = (m_SpatialAAMode >= 1);  // FXAA on for both FXAA and MSAA modes
             if (m_SceneFB->GetSpec().samples != desiredSamples) {
                 auto& fbSpec = m_SceneFB->GetSpec();
                 Puluo::FramebufferSpec newSpec;
@@ -866,6 +918,7 @@ public:
                 if (m_DepthPrepassFB) m_DepthPrepassFB->Resize(vpW, vpH);
                 if (m_SSAO) m_SSAO->Resize(vpW, vpH);
                 if (m_SSR) m_SSR->Resize(vpW, vpH);
+                if (m_TAA) m_TAA->Resize(vpW, vpH);
                 m_Camera.SetAspectRatio(static_cast<float>(vpW) / static_cast<float>(vpH));
             }
         }
@@ -964,7 +1017,7 @@ public:
 
         // Editor panels
         bool toolbarImport = false;
-        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_AAMode, m_Saturation, m_Contrast, m_SSAOConfig, m_SSRConfig, m_WeatherConfig);
+        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_TAAEnabled, m_SpatialAAMode, m_Saturation, m_Contrast, m_SSAOConfig, m_SSRConfig, m_WeatherConfig);
         wantsImport = wantsImport || toolbarImport;
 
         Puluo::DrawSceneHierarchy(m_Scene, m_CommandHistory);
@@ -1277,9 +1330,12 @@ private:
 
         // Post-processing
         {
-            env["postprocess"]["aaMode"] = m_AAMode;
+            env["postprocess"]["taaEnabled"] = m_TAAEnabled;
+            env["postprocess"]["spatialAAMode"] = m_SpatialAAMode;
             env["postprocess"]["saturation"] = m_Saturation;
             env["postprocess"]["contrast"] = m_Contrast;
+            // Legacy field for backward compatibility
+            env["postprocess"]["aaMode"] = m_SpatialAAMode;
         }
 
         // Weather
@@ -1555,8 +1611,14 @@ private:
             // Post-processing
             if (env.contains("postprocess")) {
                 auto& pp = env["postprocess"];
-                m_AAMode = pp.value("aaMode", 2);
-                m_FXAAEnabled = (m_AAMode >= 1);
+                // New fields
+                m_TAAEnabled = pp.value("taaEnabled", true);
+                m_SpatialAAMode = pp.value("spatialAAMode", 2);
+                // Backward compatibility: if spatialAAMode not present, use aaMode
+                if (!pp.contains("spatialAAMode") && pp.contains("aaMode")) {
+                    m_SpatialAAMode = pp.value("aaMode", 2);
+                }
+                m_FXAAEnabled = (m_SpatialAAMode >= 1);
                 m_Saturation = pp.value("saturation", 1.0f);
                 m_Contrast = pp.value("contrast", 1.0f);
             }
@@ -1691,6 +1753,14 @@ private:
     int m_AAMode = 2;  // 0=None, 1=FXAA, 2=MSAA 4x
     float m_Saturation = 1.0f;
     float m_Contrast = 1.0f;
+
+    // TAA
+    std::unique_ptr<Puluo::TAA> m_TAA;
+    bool m_TAAEnabled = true;
+    int m_SpatialAAMode = 2;  // 0=None, 1=FXAA, 2=MSAA 4x
+    uint32_t m_FrameCount = 0;
+    Puluo::Mat4 m_PrevViewProjection{1.0f};
+
     Puluo::CameraController m_Camera;
     Puluo::LightManager m_Lights;
     Puluo::IBLMaps m_IBLMaps;

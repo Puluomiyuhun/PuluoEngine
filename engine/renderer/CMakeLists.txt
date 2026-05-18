@@ -21,6 +21,7 @@ add_library(PuluoRenderer STATIC
     src/WeatherSystem.cpp
     src/InstancedMesh.cpp
     src/SSR.cpp
+    src/TAA.cpp
     src/ShadowPass.cpp
     src/DepthPrepass.cpp
     src/SSAOPass.cpp

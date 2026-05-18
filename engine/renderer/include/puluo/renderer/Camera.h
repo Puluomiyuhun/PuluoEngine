@@ -31,6 +31,14 @@ public:
     const Mat4& GetProjectionMatrix() const { return m_Camera.GetProjection(); }
     Mat4 GetViewProjection() const { return m_Camera.GetProjection() * m_ViewMatrix; }
 
+    // TAA jitter support
+    void SetJitter(float jx, float jy);
+    void ClearJitter();
+    const Mat4& GetProjectionMatrixJittered() const { return m_JitteredProjection; }
+    const Mat4& GetProjectionMatrixUnjittered() const { return m_Camera.GetProjection(); }
+    Vec2 GetJitter() const { return m_Jitter; }
+    Vec2 GetPrevJitter() const { return m_PrevJitter; }
+
     void SetAspectRatio(float ratio);
     const Vec3& GetPosition() const { return m_Position; }
 
@@ -81,6 +89,11 @@ private:
     bool m_FirstMouse = true;
     bool m_MouseCaptured = false;
     bool m_InputEnabled = true;
+
+    // TAA jitter state
+    Mat4 m_JitteredProjection{1.0f};
+    Vec2 m_Jitter{0.0f};
+    Vec2 m_PrevJitter{0.0f};
 
     void UpdateVectors();
     void UpdateViewMatrix();

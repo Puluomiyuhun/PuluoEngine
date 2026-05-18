@@ -125,6 +125,28 @@ void CameraController::UpdateViewMatrix() {
 
 void CameraController::UpdateProjection() {
     m_Camera = Camera::Perspective(m_Fov, m_AspectRatio, m_NearClip, m_FarClip);
+    // Reapply jitter if active
+    if (m_Jitter.x != 0.0f || m_Jitter.y != 0.0f) {
+        m_JitteredProjection = m_Camera.GetProjection();
+        m_JitteredProjection[2][0] += m_Jitter.x;
+        m_JitteredProjection[2][1] += m_Jitter.y;
+    } else {
+        m_JitteredProjection = m_Camera.GetProjection();
+    }
+}
+
+void CameraController::SetJitter(float jx, float jy) {
+    m_PrevJitter = m_Jitter;
+    m_Jitter = Vec2(jx, jy);
+    m_JitteredProjection = m_Camera.GetProjection();
+    m_JitteredProjection[2][0] += jx;
+    m_JitteredProjection[2][1] += jy;
+}
+
+void CameraController::ClearJitter() {
+    m_PrevJitter = Vec2(0.0f);
+    m_Jitter = Vec2(0.0f);
+    m_JitteredProjection = m_Camera.GetProjection();
 }
 
 } // namespace Puluo
