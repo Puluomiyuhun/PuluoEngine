@@ -434,12 +434,18 @@ public:
                 m_TAAStillFrames++;
             }
 
-            // Accumulate for 32 frames (two full Halton cycles), then freeze
-            if (m_TAAStillFrames < 32) {
+            // Moving: full jitter for maximum temporal stability
+            // Still: minimal jitter, converge fast, then freeze
+            constexpr uint32_t kConvergeFrames = 32;  // freeze after this many still frames
+            constexpr float kStillJitterScale = 0.25f; // 25% jitter when still (less blur)
+
+            if (m_TAAStillFrames < kConvergeFrames) {
                 int idx = m_FrameCount % 16;
                 float jx = (Halton(idx + 1, 2) - 0.5f) * 2.0f / fbWidth;
                 float jy = (Halton(idx + 1, 3) - 0.5f) * 2.0f / fbHeight;
-                m_Camera.SetJitter(jx, jy);
+                // Scale down jitter when camera is still to reduce blur
+                float scale = (m_TAAStillFrames > 0) ? kStillJitterScale : 1.0f;
+                m_Camera.SetJitter(jx * scale, jy * scale);
                 m_TAAConverged = false;
             } else {
                 m_Camera.ClearJitter();
