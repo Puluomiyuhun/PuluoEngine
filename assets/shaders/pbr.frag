@@ -174,24 +174,28 @@ float SampleShadowCSM(vec3 worldPos, vec3 normal) {
     }
 
     // Normal bias: push along normal to prevent acne
-    vec3 biasedPos = worldPos + normal * uShadowNormalBias * (1.0 + float(cascadeIndex) * 0.5);
+    float biasScale = 1.0 + float(cascadeIndex) * 0.5;
+    vec3 biasedPos = worldPos + normal * uShadowNormalBias * biasScale;
 
     float shadowCurrent = SampleShadowCascade(biasedPos, cascadeIndex);
 
     // Blend between cascades at boundary to eliminate hard seams
-    // Use a transition zone of 20% of the cascade range
+    // Use a transition zone of 30% of the cascade range
     if (cascadeIndex < uCascadeCount - 1) {
         float splitDist = uCascadeSplits[cascadeIndex];
         float prevSplit = (cascadeIndex > 0) ? uCascadeSplits[cascadeIndex - 1] : 0.0;
         float cascadeRange = splitDist - prevSplit;
-        float transitionWidth = cascadeRange * 0.2;
+        float transitionWidth = cascadeRange * 0.3;
         float fadeStart = splitDist - transitionWidth;
 
         if (dist > fadeStart) {
             float t = smoothstep(fadeStart, splitDist, dist);
             int nextIdx = cascadeIndex + 1;
-            vec3 biasedPosNext = worldPos + normal * uShadowNormalBias * (1.0 + float(nextIdx) * 0.5);
-            float shadowNext = SampleShadowCascade(biasedPosNext, nextIdx);
+            // Interpolate bias between cascades for seamless transition
+            float nextBiasScale = 1.0 + float(nextIdx) * 0.5;
+            float blendedBias = mix(biasScale, nextBiasScale, t);
+            vec3 blendedBiasedPos = worldPos + normal * uShadowNormalBias * blendedBias;
+            float shadowNext = SampleShadowCascade(blendedBiasedPos, nextIdx);
             shadowCurrent = mix(shadowCurrent, shadowNext, t);
         }
     }
