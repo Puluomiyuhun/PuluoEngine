@@ -842,6 +842,21 @@ public:
         uint32_t vpW = static_cast<uint32_t>(vpSize.x);
         uint32_t vpH = static_cast<uint32_t>(vpSize.y);
 
+        // Sync AA mode to FBO settings
+        {
+            uint32_t desiredSamples = (m_AAMode == 2) ? 4 : 1;
+            m_FXAAEnabled = (m_AAMode >= 1);  // FXAA on for both FXAA and MSAA modes
+            if (m_SceneFB->GetSpec().samples != desiredSamples) {
+                auto& fbSpec = m_SceneFB->GetSpec();
+                Puluo::FramebufferSpec newSpec;
+                newSpec.width = fbSpec.width;
+                newSpec.height = fbSpec.height;
+                newSpec.entityID = true;
+                newSpec.samples = desiredSamples;
+                m_SceneFB = std::make_unique<Puluo::Framebuffer>(newSpec);
+            }
+        }
+
         // Resize FBO if viewport size changed
         if (vpW > 0 && vpH > 0) {
             auto& fbSpec = m_SceneFB->GetSpec();
@@ -865,6 +880,35 @@ public:
                      vpSize, ImVec2(0, 1), ImVec2(1, 0));
         m_ViewportHovered = ImGui::IsItemHovered();
         m_ViewportFocused = ImGui::IsWindowFocused();
+
+        // Gizmo overlay — must run BEFORE mouse picking so IsOver()/IsUsing() are valid this frame
+        if (auto* selected = m_Scene.GetSelected()) {
+            // Snapshot transform when gizmo starts being used
+            bool isUsing = ImGuizmo::IsUsing();
+            if (isUsing && !m_GizmoWasUsing) {
+                m_GizmoStartTransform = selected->transform;
+            }
+
+            ImVec2 vpMax = ImVec2(vpMin.x + vpSize.x, vpMin.y + vpSize.y);
+            Puluo::DrawGizmo(*selected,
+                             m_Camera.GetViewMatrix(),
+                             m_Camera.GetProjectionMatrix(),
+                             m_GizmoMode,
+                             vpMin.x, vpMin.y,
+                             vpMax.x - vpMin.x, vpMax.y - vpMin.y);
+
+            // Record undo command when gizmo stops being used
+            if (!ImGuizmo::IsUsing() && m_GizmoWasUsing) {
+                int selIdx = m_Scene.GetSelectedIndex();
+                if (selIdx >= 0) {
+                    auto cmd = std::make_unique<Puluo::TransformChangeCommand>(
+                        m_Scene, static_cast<size_t>(selIdx),
+                        m_GizmoStartTransform, selected->transform);
+                    m_CommandHistory.PushExecuted(std::move(cmd));
+                }
+            }
+            m_GizmoWasUsing = isUsing;
+        }
 
         // Mouse picking / splat brush: left-click in viewport
         auto& splatBrush = Puluo::GetSplatBrushState();
@@ -912,35 +956,6 @@ public:
             }
         }
 
-        // Gizmo overlay (uses ImGuizmo's own input handling, works over ImGui::Image)
-        if (auto* selected = m_Scene.GetSelected()) {
-            // Snapshot transform when gizmo starts being used
-            bool isUsing = ImGuizmo::IsUsing();
-            if (isUsing && !m_GizmoWasUsing) {
-                m_GizmoStartTransform = selected->transform;
-            }
-
-            ImVec2 vpMax = ImVec2(vpMin.x + vpSize.x, vpMin.y + vpSize.y);
-            Puluo::DrawGizmo(*selected,
-                             m_Camera.GetViewMatrix(),
-                             m_Camera.GetProjectionMatrix(),
-                             m_GizmoMode,
-                             vpMin.x, vpMin.y,
-                             vpMax.x - vpMin.x, vpMax.y - vpMin.y);
-
-            // Record undo command when gizmo stops being used
-            if (!ImGuizmo::IsUsing() && m_GizmoWasUsing) {
-                int selIdx = m_Scene.GetSelectedIndex();
-                if (selIdx >= 0) {
-                    auto cmd = std::make_unique<Puluo::TransformChangeCommand>(
-                        m_Scene, static_cast<size_t>(selIdx),
-                        m_GizmoStartTransform, selected->transform);
-                    m_CommandHistory.PushExecuted(std::move(cmd));
-                }
-            }
-            m_GizmoWasUsing = isUsing;
-        }
-
         // Stats overlay pinned to Viewport top-right (F3 to toggle)
         Puluo::DrawStatsOverlay(&m_ShowStatsOverlay, vpMin.x, vpMin.y, vpSize.x, vpSize.y);
 
@@ -949,7 +964,7 @@ public:
 
         // Editor panels
         bool toolbarImport = false;
-        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_FXAAEnabled, m_Saturation, m_Contrast, m_SSAOConfig, m_SSRConfig, m_WeatherConfig);
+        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_AAMode, m_Saturation, m_Contrast, m_SSAOConfig, m_SSRConfig, m_WeatherConfig);
         wantsImport = wantsImport || toolbarImport;
 
         Puluo::DrawSceneHierarchy(m_Scene, m_CommandHistory);
@@ -1262,7 +1277,7 @@ private:
 
         // Post-processing
         {
-            env["postprocess"]["fxaaEnabled"] = m_FXAAEnabled;
+            env["postprocess"]["aaMode"] = m_AAMode;
             env["postprocess"]["saturation"] = m_Saturation;
             env["postprocess"]["contrast"] = m_Contrast;
         }
@@ -1540,7 +1555,8 @@ private:
             // Post-processing
             if (env.contains("postprocess")) {
                 auto& pp = env["postprocess"];
-                m_FXAAEnabled = pp.value("fxaaEnabled", true);
+                m_AAMode = pp.value("aaMode", 2);
+                m_FXAAEnabled = (m_AAMode >= 1);
                 m_Saturation = pp.value("saturation", 1.0f);
                 m_Contrast = pp.value("contrast", 1.0f);
             }
@@ -1672,6 +1688,7 @@ private:
     std::shared_ptr<Puluo::Shader> m_FXAAShader;
     uint32_t m_EmptyVAO = 0;
     bool m_FXAAEnabled = true;
+    int m_AAMode = 2;  // 0=None, 1=FXAA, 2=MSAA 4x
     float m_Saturation = 1.0f;
     float m_Contrast = 1.0f;
     Puluo::CameraController m_Camera;

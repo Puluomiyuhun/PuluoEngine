@@ -997,7 +997,7 @@ void DrawInspector(Scene& scene, CommandHistory& history,
 void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                  bool& useAtmosphere, AtmosphereParams& atmosphereParams,
                  FogParams& fogParams, CloudParams& cloudParams,
-                 bool& fxaaEnabled, float& saturation, float& contrast,
+                 int& aaMode, float& saturation, float& contrast,
                  SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
                  WeatherConfig& weatherConfig) {
     ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoCollapse);
@@ -1178,7 +1178,8 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
 
     // ---- Post Processing ----
     if (ImGui::CollapsingHeader("Post Processing")) {
-        ImGui::Checkbox("FXAA", &fxaaEnabled);
+        const char* aaItems[] = { "None", "FXAA", "MSAA 4x" };
+        ImGui::Combo("Anti-Aliasing", &aaMode, aaItems, IM_ARRAYSIZE(aaItems));
         ImGui::SliderFloat("Saturation", &saturation, 0.0f, 2.0f, "%.2f");
         ImGui::SliderFloat("Contrast", &contrast, 0.5f, 2.0f, "%.2f");
 
