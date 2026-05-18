@@ -341,13 +341,32 @@ static std::string WritePAssetForMeshSubset(
         }
 
         md.header.indexCount = static_cast<uint32_t>(md.indices.size());
-        md.header.aabbMin[0] = meshAABB.min.x; md.header.aabbMin[1] = meshAABB.min.y; md.header.aabbMin[2] = meshAABB.min.z;
-        md.header.aabbMax[0] = meshAABB.max.x; md.header.aabbMax[1] = meshAABB.max.y; md.header.aabbMax[2] = meshAABB.max.z;
         modelAABB.Merge(meshAABB);
         meshes.push_back(std::move(md));
     }
 
     if (meshes.empty()) return "";
+
+    // ---- Re-center all vertices to AABB center (fix pivot point) ----
+    Vec3 center = {
+        (modelAABB.min.x + modelAABB.max.x) * 0.5f,
+        (modelAABB.min.y + modelAABB.max.y) * 0.5f,
+        (modelAABB.min.z + modelAABB.max.z) * 0.5f
+    };
+    AABB recenteredAABB;
+    for (auto& md : meshes) {
+        AABB meshAABB;
+        for (auto& vert : md.vertices) {
+            vert.position.x -= center.x;
+            vert.position.y -= center.y;
+            vert.position.z -= center.z;
+            meshAABB.Expand(vert.position);
+        }
+        md.header.aabbMin[0] = meshAABB.min.x; md.header.aabbMin[1] = meshAABB.min.y; md.header.aabbMin[2] = meshAABB.min.z;
+        md.header.aabbMax[0] = meshAABB.max.x; md.header.aabbMax[1] = meshAABB.max.y; md.header.aabbMax[2] = meshAABB.max.z;
+        recenteredAABB.Merge(meshAABB);
+    }
+    modelAABB = recenteredAABB;
 
     // ---- Write .passet ----
     std::filesystem::create_directories(std::filesystem::path(outPath).parent_path());
