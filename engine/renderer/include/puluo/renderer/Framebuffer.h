@@ -26,10 +26,14 @@ public:
 
     void Resize(uint32_t width, uint32_t height);
 
-    uint32_t GetColorAttachmentID() const { return m_ColorAttachment; }
+    uint32_t GetColorAttachmentID() const;
+    uint32_t GetEntityIDAttachmentID() const;
     uint32_t GetDepthAttachmentID() const { return m_DepthAttachment; }
     uint32_t GetRendererID() const { return m_RendererID; }
     const FramebufferSpec& GetSpec() const { return m_Spec; }
+
+    // MSAA resolve — call after rendering to MSAA FBO, before reading textures
+    void Resolve();
 
     // Entity ID picking support
     int ReadPixel(int attachmentIndex, int x, int y) const;
@@ -42,6 +46,11 @@ private:
     uint32_t m_DepthAttachment = 0;
     bool m_DepthIsTexture = false;
     FramebufferSpec m_Spec;
+
+    // Resolve targets for MSAA (only used when samples > 1)
+    uint32_t m_ResolveFBO = 0;
+    uint32_t m_ResolveColorAttachment = 0;
+    uint32_t m_ResolveEntityIDAttachment = 0;
 
     void Invalidate();
 };

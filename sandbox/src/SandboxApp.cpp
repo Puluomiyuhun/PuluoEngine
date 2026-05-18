@@ -70,6 +70,7 @@ public:
         fbSpec.width = 1920;
         fbSpec.height = 1080;
         fbSpec.entityID = true;
+        fbSpec.samples = 4;  // 4x MSAA
         m_SceneFB = std::make_unique<Puluo::Framebuffer>(fbSpec);
 
         // Post-process framebuffer for FXAA (color only, no entity ID or depth)
@@ -639,6 +640,9 @@ public:
                 if (obj.water.has_value()) { hasWater = true; break; }
             }
             if (hasWater && m_WaterShader) {
+                // Resolve MSAA before copying scene color
+                m_SceneFB->Resolve();
+
                 // Copy current scene color to avoid read-write hazard
                 auto& fbSpec = m_SceneFB->GetSpec();
                 if (m_SceneColorCopyWidth != fbSpec.width || m_SceneColorCopyHeight != fbSpec.height) {
@@ -712,6 +716,7 @@ public:
 
         Puluo::Renderer::EndScene();
 
+        m_SceneFB->Resolve();  // Resolve MSAA before post-process reads the texture
         m_SceneFB->Unbind();
 
         // ---- Post-process (SSR + FXAA) ----
