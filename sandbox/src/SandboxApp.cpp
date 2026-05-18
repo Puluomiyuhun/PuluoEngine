@@ -426,6 +426,11 @@ public:
         float fbHeight = static_cast<float>(fbSpec.height);
 
         if (m_TAAEnabled && fbWidth > 0 && fbHeight > 0) {
+            // Reset convergence when TAA is freshly toggled on
+            if (!m_PrevTAAEnabled) {
+                m_TAAStillFrames = 0;
+                m_TAAConverged = false;
+            }
             // Detect camera movement by comparing unjittered VP
             Puluo::Mat4 currentUnjitteredVP = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
             if (currentUnjitteredVP != m_PrevViewProjection && m_FrameCount > 0) {
@@ -454,6 +459,7 @@ public:
         } else {
             m_Camera.ClearJitter();
         }
+        m_PrevTAAEnabled = m_TAAEnabled;
 
         // (Atmosphere sun is injected as directional light during LightManager rebuild below)
 
@@ -925,7 +931,15 @@ public:
         // Sync AA mode to FBO settings
         {
             uint32_t desiredSamples = (m_SpatialAAMode == 2) ? 4 : 1;
-            m_FXAAEnabled = (m_SpatialAAMode >= 1);  // FXAA on for both FXAA and MSAA modes
+            m_FXAAEnabled = (m_SpatialAAMode == 1);  // FXAA only in FXAA mode, not MSAA
+
+            // Detect AA mode change → reset TAA convergence so output updates immediately
+            if (m_SpatialAAMode != m_PrevSpatialAAMode) {
+                m_PrevSpatialAAMode = m_SpatialAAMode;
+                m_TAAStillFrames = 0;
+                m_TAAConverged = false;
+            }
+
             if (m_SceneFB->GetSpec().samples != desiredSamples) {
                 auto& fbSpec = m_SceneFB->GetSpec();
                 Puluo::FramebufferSpec newSpec;
@@ -1661,7 +1675,7 @@ private:
                 if (!pp.contains("spatialAAMode") && pp.contains("aaMode")) {
                     m_SpatialAAMode = pp.value("aaMode", 2);
                 }
-                m_FXAAEnabled = (m_SpatialAAMode >= 1);
+                m_FXAAEnabled = (m_SpatialAAMode == 1);
                 m_Saturation = pp.value("saturation", 1.0f);
                 m_Contrast = pp.value("contrast", 1.0f);
             }
@@ -1805,6 +1819,8 @@ private:
     Puluo::Mat4 m_PrevViewProjection{1.0f};
     uint32_t m_TAAStillFrames = 0;   // Consecutive frames with static camera
     bool m_TAAConverged = false;      // True when TAA has accumulated enough and frozen
+    bool m_PrevTAAEnabled = false;    // Track TAA toggle for convergence reset
+    int m_PrevSpatialAAMode = 2;      // Track AA mode change for convergence reset
 
     Puluo::CameraController m_Camera;
     Puluo::LightManager m_Lights;
