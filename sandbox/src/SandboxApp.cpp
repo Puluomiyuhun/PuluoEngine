@@ -754,6 +754,10 @@ public:
 
         // ---- TAA Resolve ----
         if (m_TAAEnabled && m_TAA && m_TAA->IsCreated()) {
+            // First frame: init prevVP to current unjittered VP (identity matrix would cause all-OOB reprojection)
+            if (m_FrameCount == 0) {
+                m_PrevViewProjection = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
+            }
             Puluo::Mat4 currentVP = m_Camera.GetProjectionMatrixJittered() * m_Camera.GetViewMatrix();
             m_TAA->Resolve(
                 m_SceneFB->GetColorAttachmentID(),
@@ -924,9 +928,14 @@ public:
         }
 
         // Display FBO texture (flipped UV for OpenGL)
-        uint32_t texID = m_PostProcessPass.IsEnabled()
-            ? m_PostProcessFB->GetColorAttachmentID()
-            : m_SceneFB->GetColorAttachmentID();
+        // Priority: postProcessFB (FXAA/SSR + color grading) > TAA output > raw scene
+        uint32_t texID;
+        if (m_PostProcessPass.IsEnabled())
+            texID = m_PostProcessFB->GetColorAttachmentID();
+        else if (m_TAAEnabled && m_TAA && m_TAA->IsCreated())
+            texID = m_TAA->GetOutputTexture();
+        else
+            texID = m_SceneFB->GetColorAttachmentID();
         ImVec2 vpMin = ImGui::GetCursorScreenPos();
         ImGui::SetNextItemAllowOverlap();
         ImGui::Image(static_cast<ImTextureID>(static_cast<uintptr_t>(texID)),
