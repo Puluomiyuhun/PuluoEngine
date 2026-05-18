@@ -68,8 +68,8 @@ void PostProcessPass::Execute(RenderContext& ctx) {
     // FXAA toggle: off when spatial AA is None (PostProcessPass still runs for TAA/SSR/color grading)
     ctx.fxaaShader->SetInt("uFXAAEnabled", ctx.fxaaEnabled ? 1 : 0);
 
-    // TAA sharpening: apply when TAA provides the input to counteract blur
-    ctx.fxaaShader->SetFloat("uSharpen", ctx.taaEnabled ? 0.6f : 0.0f);
+    // TAA sharpening: disabled for now (TAA blur is minimal with reduced still-jitter)
+    ctx.fxaaShader->SetFloat("uSharpen", 0.0f);
 
     glBindVertexArray(ctx.emptyVAO);
     glDrawArrays(GL_TRIANGLES, 0, 3);
