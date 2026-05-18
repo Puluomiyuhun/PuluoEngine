@@ -989,6 +989,10 @@ public:
                              vpMin.x, vpMin.y,
                              vpMax.x - vpMin.x, vpMax.y - vpMin.y);
 
+            // Scene changed — reset TAA accumulation so viewport updates immediately
+            if (ImGuizmo::IsUsing())
+                m_TAAStillFrames = 0;
+
             // Record undo command when gizmo stops being used
             if (!ImGuizmo::IsUsing() && m_GizmoWasUsing) {
                 int selIdx = m_Scene.GetSelectedIndex();

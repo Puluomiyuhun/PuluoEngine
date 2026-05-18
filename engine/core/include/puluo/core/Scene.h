@@ -125,7 +125,10 @@ struct Transform {
     void FromMatrix(const Mat4& matrix) {
         Vec3 skew;
         Vec4 perspective;
-        glm::decompose(matrix, scale, orientation, position, skew, perspective);
+        if (!glm::decompose(matrix, scale, orientation, position, skew, perspective))
+            return; // decomposition failed — keep previous transform
+        // glm::decompose returns a conjugated quaternion (known GLM quirk)
+        orientation = glm::conjugate(orientation);
         // Update euler hint from quaternion
         eulerHint = glm::degrees(glm::eulerAngles(orientation));
     }

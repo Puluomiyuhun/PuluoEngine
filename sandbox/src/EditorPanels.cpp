@@ -1224,6 +1224,7 @@ bool DrawGizmo(SceneObject& object, const Mat4& view, const Mat4& projection,
     ImGuizmo::SetRect(viewportX, viewportY, viewportW, viewportH);
 
     Mat4 matrix = object.transform.ToMatrix();
+    Mat4 originalMatrix = matrix;
 
     ImGuizmo::OPERATION op;
     switch (mode) {
@@ -1241,13 +1242,29 @@ bool DrawGizmo(SceneObject& object, const Mat4& view, const Mat4& projection,
         glm::value_ptr(matrix)
     );
 
+    // ImGuizmo::Manipulate may not return true even when it modifies the matrix,
+    // so also check for actual matrix change
+    if (!manipulated)
+        manipulated = (matrix != originalMatrix);
+
     if (manipulated) {
-        // Use ImGuizmo's own decompose — stable round-trip, avoids glm::decompose quirks
-        float translation[3], rotation[3], scaleArr[3];
-        ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(matrix), translation, rotation, scaleArr);
-        object.transform.position = Vec3(translation[0], translation[1], translation[2]);
-        object.transform.scale = Vec3(scaleArr[0], scaleArr[1], scaleArr[2]);
-        object.transform.SetEulerDegrees(Vec3(rotation[0], rotation[1], rotation[2]));
+        object.transform.position = Vec3(matrix[3]);
+
+        Vec3 newScale;
+        newScale.x = glm::length(Vec3(matrix[0]));
+        newScale.y = glm::length(Vec3(matrix[1]));
+        newScale.z = glm::length(Vec3(matrix[2]));
+        object.transform.scale = newScale;
+
+        if (newScale.x > 1e-6f && newScale.y > 1e-6f && newScale.z > 1e-6f) {
+            Mat3 rotMat;
+            rotMat[0] = Vec3(matrix[0]) / newScale.x;
+            rotMat[1] = Vec3(matrix[1]) / newScale.y;
+            rotMat[2] = Vec3(matrix[2]) / newScale.z;
+            object.transform.orientation = glm::quat_cast(rotMat);
+        }
+
+        object.transform.eulerHint = glm::degrees(glm::eulerAngles(object.transform.orientation));
     }
 
     return manipulated;
