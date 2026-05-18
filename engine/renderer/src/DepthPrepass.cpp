@@ -15,10 +15,11 @@
 namespace Puluo {
 
 void DepthPrepassPass::Setup(RenderContext& ctx) {
-    // Depth prepass is needed for SSAO, SSR, or water shore fade
+    // Depth prepass is needed for SSAO, SSR, water shore fade, or TAA reprojection
     bool needPrepass = (ctx.ssao && ctx.ssaoConfig && ctx.ssaoConfig->enabled)
                      || (ctx.ssrConfig && ctx.ssrConfig->enabled)
-                     || ctx.hasWaterObjects;
+                     || ctx.hasWaterObjects
+                     || ctx.taaEnabled;
     if (!needPrepass || !ctx.depthPrepassFB) {
         SetEnabled(false); 
         return;

@@ -18,20 +18,30 @@ void main() {
     // ---- 1. Motion Vector: Reproject current pixel to previous frame ----
     float depth = texture(uDepthTexture, uv).r;
 
-    // Reconstruct current frame clip space position
-    vec2 ndc = uv * 2.0 - 1.0;
-    vec4 clipPos = vec4(ndc, depth, 1.0);
+    // Reversed-Z: depth=0 means far plane (sky/infinity).
+    // The inverse projection produces w=0 for these pixels, causing NaN.
+    // Skip reprojection for sky — use current UV directly.
+    vec2 prevUV = uv;
+    if (depth > 1e-6) {
+        // Reconstruct current frame clip space position
+        vec2 ndc = uv * 2.0 - 1.0;
+        vec4 clipPos = vec4(ndc, depth, 1.0);
 
-    // Inverse project to world space
-    vec4 worldPos = uCurrentVPInverse * clipPos;
-    worldPos /= worldPos.w;
+        // Inverse project to world space
+        vec4 worldPos = uCurrentVPInverse * clipPos;
+        worldPos /= worldPos.w;
 
-    // Project to previous frame screen space
-    vec4 prevClip = uPrevVP * worldPos;
-    vec2 prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+        // Project to previous frame screen space
+        vec4 prevClip = uPrevVP * worldPos;
+        prevUV = (prevClip.xy / prevClip.w) * 0.5 + 0.5;
+    }
 
     // ---- 2. Sample History Color ----
     vec3 historyColor = texture(uHistoryColor, prevUV).rgb;
+    // Guard against NaN from corrupted history (can happen after resize/init)
+    if (any(isnan(historyColor)) || any(isinf(historyColor))) {
+        historyColor = currentColor;
+    }
 
     // ---- 3. Neighborhood Clamp (prevent ghosting) ----
     // Build color bounding box from current frame's 3x3 neighborhood

@@ -11,7 +11,7 @@ namespace Puluo {
 
 void PostProcessPass::Setup(RenderContext& ctx) {
     bool ssrActive = ctx.ssr && ctx.ssrConfig && ctx.ssrConfig->enabled && ctx.ssr->IsCreated();
-    bool needPostProcess = ctx.fxaaEnabled || ssrActive;
+    bool needPostProcess = ctx.fxaaEnabled || ssrActive || ctx.taaEnabled;
     if (!needPostProcess || !ctx.sceneFB || !ctx.postProcessFB || !ctx.fxaaShader) {
         SetEnabled(false);
         return;
