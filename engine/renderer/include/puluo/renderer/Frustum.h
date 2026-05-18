@@ -10,9 +10,12 @@ struct Frustum {
     // Each plane stored as Vec4(a, b, c, d) where ax + by + cz + d = 0
     // Normal (a,b,c) points inward (toward the visible region).
     Vec4 planes[6]; // Left, Right, Bottom, Top, Near, Far
+    int planeCount = 6; // 5 for reversed-Z infinite projection (no far plane)
 
     // Extract frustum planes from a View-Projection matrix.
-    static Frustum FromVPMatrix(const Mat4& vp) {
+    // Set infiniteFar = true when using reversed-Z infinite far projection,
+    // which makes the far plane degenerate and should be skipped.
+    static Frustum FromVPMatrix(const Mat4& vp, bool infiniteFar = false) {
         Frustum f;
 
         // Left:   row3 + row0
@@ -58,8 +61,11 @@ struct Frustum {
             vp[3][3] - vp[3][2]
         );
 
+        // With reversed-Z infinite far, the far plane is degenerate — skip it
+        f.planeCount = infiniteFar ? 5 : 6;
+
         // Normalize all planes
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < f.planeCount; i++) {
             float len = glm::length(Vec3(f.planes[i]));
             if (len > 0.0f)
                 f.planes[i] /= len;
@@ -71,7 +77,7 @@ struct Frustum {
     // Test if an AABB is at least partially inside the frustum.
     // Returns true if visible (inside or intersecting), false if completely outside.
     bool TestAABB(const AABB& aabb) const {
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < planeCount; i++) {
             Vec3 normal(planes[i]);
             float d = planes[i].w;
 
@@ -91,7 +97,7 @@ struct Frustum {
 
     // Test if a bounding sphere is at least partially inside the frustum.
     bool TestSphere(const Vec3& center, float radius) const {
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < planeCount; i++) {
             Vec3 normal(planes[i]);
             float d = planes[i].w;
             if (glm::dot(normal, center) + d < -radius)

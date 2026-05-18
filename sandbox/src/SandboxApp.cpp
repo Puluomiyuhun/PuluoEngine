@@ -463,16 +463,13 @@ public:
 
         // (Atmosphere sun is injected as directional light during LightManager rebuild below)
 
-        // ---- Per-instance frustum + distance culling (shared by all passes) ----
-        Puluo::Frustum frustum = Puluo::Frustum::FromVPMatrix(m_Camera.GetViewProjection());
+        // ---- Reset frame stats (before shadow + main passes) ----
         Puluo::Renderer::ResetFrameStats();
-        if (!m_InstancedMeshes.empty()) {
-            for (auto& [idx, im] : m_InstancedMeshes) {
-                im->CullAndUpload(frustum, m_Camera.GetPosition(), m_InstancedMaxDrawDistance);
-            }
-        }
 
         // ---- CSM Shadow Pass ----
+        // NOTE: Shadow pass uploads ALL instance matrices (unculled) so that
+        // shadow casters behind the camera are included in the shadow map.
+        // Camera frustum culling is done AFTER the shadow pass.
         {
             // Compute shadow light direction
             Puluo::Vec3 shadowLightDir(0.0f, -1.0f, 0.0f);
@@ -501,6 +498,16 @@ public:
             m_RenderCtx.instancedMeshes = &m_InstancedMeshes;
 
             m_ShadowPass.Run(m_RenderCtx);
+        }
+
+        // ---- Per-instance frustum + distance culling (after shadow pass) ----
+        // Must run after shadow pass which uses unculled instances, and before
+        // main render passes which need camera-culled instances.
+        Puluo::Frustum frustum = Puluo::Frustum::FromVPMatrix(m_Camera.GetViewProjection(), true);
+        if (!m_InstancedMeshes.empty()) {
+            for (auto& [idx, im] : m_InstancedMeshes) {
+                im->CullAndUpload(frustum, m_Camera.GetPosition(), m_InstancedMaxDrawDistance);
+            }
         }
 
         // ---- Depth Pre-pass (for SSAO / SSR / Water shore fade) ----
@@ -670,7 +677,7 @@ public:
             for (auto& [idx, im] : m_InstancedMeshes) {
                 if (im->GetVisibleCount() == 0) continue;
                 m_PBRInstancedShader->SetInt("uEntityID", static_cast<int>(idx));
-                im->DrawWithMaterialsCulled(m_PBRInstancedShader);
+                im->DrawWithMaterialsCulled(m_PBRInstancedShader);   
             }
         }
 
@@ -688,7 +695,7 @@ public:
         }
 
         // Render particles (after sky/clouds, before water)
-        m_ParticleSystem.Render(m_Camera);
+        m_ParticleSystem.Render(m_Camera); 
 
         // Render weather particles (rain/snow)
         m_WeatherSystem.Render(m_Camera, m_WeatherConfig);
