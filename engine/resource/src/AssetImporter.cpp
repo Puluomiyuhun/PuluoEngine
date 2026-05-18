@@ -262,7 +262,7 @@ static std::string WritePAssetForMeshSubset(
             texRefToIndex[ref] = -1;
             return -1;
         }
-        DownscaleTexture(decoded, 2048);
+        DownscaleTexture(decoded, 4096);
         int32_t idx = static_cast<int32_t>(decodedTextures.size());
         decodedTextures.push_back(std::move(decoded));
         texRefToIndex[ref] = idx;
@@ -391,7 +391,7 @@ static std::string WritePAssetForMeshSubset(
     file.close();
     PULUO_CORE_INFO("AssetImporter: Split export -> '{}' ({} tex, {} mat, {} mesh)",
                     outPath, texCount, matCount, meshCount);
-    return outPath;
+    return outPath;     
 }
 
 // ---------------------------------------------------------------------------
@@ -494,8 +494,8 @@ std::string AssetImporter::WriteModelPAsset(const std::string& sourcePath, const
             return -1;
         }
 
-        // Limit model textures to 2048x2048 to reduce .passet file size
-        DownscaleTexture(decoded, 2048);
+        // Limit model textures to 4096x4096 to reduce .passet file size
+        DownscaleTexture(decoded, 4096);
 
         int32_t idx = static_cast<int32_t>(decodedTextures.size());
         decodedTextures.push_back(std::move(decoded));
