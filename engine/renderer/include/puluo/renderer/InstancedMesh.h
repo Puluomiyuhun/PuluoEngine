@@ -37,7 +37,10 @@ public:
     void DrawWithMaterialsCulled(const std::shared_ptr<Shader>& shader) const;
 
     // Draw all meshes instanced (for shadow/depth passes - no materials)
+    // Temporarily uploads ALL instance matrices, then draws. Caller must
+    // call CullAndUpload() again before drawing the main pass.
     void DrawAllMeshes() const;
+    void UploadAllInstances() const;
 
     // Draw with PBR materials (for main pass)
     void DrawWithMaterials(const std::shared_ptr<Shader>& shader) const;
@@ -59,6 +62,9 @@ private:
 
     // One instance VBO shared across all mesh VAOs
     std::shared_ptr<VertexBuffer> m_InstanceVBO;
+
+    // Per-mesh VAOs owned by this InstancedMesh (not shared with Model)
+    std::vector<std::shared_ptr<VertexArray>> m_OwnVAOs;
 
     // CPU-side matrix data (all instances)
     std::vector<Mat4> m_Matrices;

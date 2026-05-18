@@ -109,6 +109,17 @@ void VertexArray::AddVertexBuffer(std::shared_ptr<VertexBuffer> vbo) {
 void VertexArray::AddInstanceBuffer(std::shared_ptr<VertexBuffer> vbo) {
     PULUO_CORE_ASSERT(vbo->GetLayout().GetElements().size(), "VertexBuffer has no layout!");
 
+    // If an instance buffer was already attached, reuse the same attribute locations
+    if (m_HasInstanceBuffer) {
+        m_VertexBufferIndex = m_InstanceStartIndex;
+        // Remove old instance VBO (always the last entry)
+        if (!m_VertexBuffers.empty())
+            m_VertexBuffers.pop_back();
+    } else {
+        m_InstanceStartIndex = m_VertexBufferIndex;
+        m_HasInstanceBuffer = true;
+    }
+
     glBindVertexArray(m_RendererID);
     vbo->Bind();
 

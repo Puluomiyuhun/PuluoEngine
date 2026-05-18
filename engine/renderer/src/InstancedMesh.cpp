@@ -38,12 +38,14 @@ bool InstancedMesh::Setup(const std::string& modelPath, uint32_t maxInstances) {
         {"aInstanceModel", ShaderDataType::Mat4}
     });
 
-    // Attach instance buffer to each mesh's VAO
+    // Create per-mesh VAOs owned by this InstancedMesh (don't touch the Model's shared VAOs)
+    m_OwnVAOs.clear();
     for (auto& modelMesh : m_Model->GetMeshes()) {
-        // GetVertexArray returns const ref, but we need to modify the VAO during setup
-        // Use const_cast here since Setup is a one-time initialization
-        auto vao = modelMesh.mesh.GetVertexArray();
+        auto vao = std::make_shared<VertexArray>();
+        vao->AddVertexBuffer(modelMesh.mesh.GetVertexBuffer());
+        vao->SetIndexBuffer(modelMesh.mesh.GetIndexBuffer());
         vao->AddInstanceBuffer(m_InstanceVBO);
+        m_OwnVAOs.push_back(vao);
     }
 
     PULUO_CORE_INFO("InstancedMesh: Loaded '{}' with {} meshes, max {} instances",
@@ -120,9 +122,8 @@ void InstancedMesh::CullAndUpload(const Frustum& frustum, const Vec3& camPos, fl
 void InstancedMesh::DrawAllMeshesCulled() const {
     if (!m_Model || m_VisibleCount == 0) return;
 
-    for (const auto& modelMesh : m_Model->GetMeshes()) {
-        const auto& vao = modelMesh.mesh.GetVertexArray();
-        RenderCommand::DrawIndexedInstanced(vao, m_VisibleCount);
+    for (size_t i = 0; i < m_OwnVAOs.size(); i++) {
+        RenderCommand::DrawIndexedInstanced(m_OwnVAOs[i], m_VisibleCount);
     }
 }
 
@@ -130,22 +131,26 @@ void InstancedMesh::DrawWithMaterialsCulled(const std::shared_ptr<Shader>& shade
     if (!m_Model || m_VisibleCount == 0) return;
 
     const auto& materials = m_Model->GetMaterials();
-    for (const auto& modelMesh : m_Model->GetMeshes()) {
-        if (modelMesh.materialIndex >= 0 &&
-            modelMesh.materialIndex < static_cast<int>(materials.size())) {
-            Renderer::BindPBRMaterial(shader, materials[modelMesh.materialIndex]);
+    const auto& meshes = m_Model->GetMeshes();
+    for (size_t i = 0; i < m_OwnVAOs.size(); i++) {
+        int matIdx = meshes[i].materialIndex;
+        if (matIdx >= 0 && matIdx < static_cast<int>(materials.size())) {
+            Renderer::BindPBRMaterial(shader, materials[matIdx]);
         }
-        const auto& vao = modelMesh.mesh.GetVertexArray();
-        RenderCommand::DrawIndexedInstanced(vao, m_VisibleCount);
+        RenderCommand::DrawIndexedInstanced(m_OwnVAOs[i], m_VisibleCount);
     }
+}
+
+void InstancedMesh::UploadAllInstances() const {
+    if (!m_InstanceVBO || m_InstanceCount == 0) return;
+    m_InstanceVBO->SetData(m_Matrices.data(), m_InstanceCount * sizeof(Mat4));
 }
 
 void InstancedMesh::DrawAllMeshes() const {
     if (!m_Model || m_InstanceCount == 0) return;
 
-    for (const auto& modelMesh : m_Model->GetMeshes()) {
-        const auto& vao = modelMesh.mesh.GetVertexArray();
-        RenderCommand::DrawIndexedInstanced(vao, m_InstanceCount);
+    for (size_t i = 0; i < m_OwnVAOs.size(); i++) {
+        RenderCommand::DrawIndexedInstanced(m_OwnVAOs[i], m_InstanceCount);
     }
 }
 
@@ -153,13 +158,13 @@ void InstancedMesh::DrawWithMaterials(const std::shared_ptr<Shader>& shader) con
     if (!m_Model || m_InstanceCount == 0) return;
 
     const auto& materials = m_Model->GetMaterials();
-    for (const auto& modelMesh : m_Model->GetMeshes()) {
-        if (modelMesh.materialIndex >= 0 &&
-            modelMesh.materialIndex < static_cast<int>(materials.size())) {
-            Renderer::BindPBRMaterial(shader, materials[modelMesh.materialIndex]);
+    const auto& meshes = m_Model->GetMeshes();
+    for (size_t i = 0; i < m_OwnVAOs.size(); i++) {
+        int matIdx = meshes[i].materialIndex;
+        if (matIdx >= 0 && matIdx < static_cast<int>(materials.size())) {
+            Renderer::BindPBRMaterial(shader, materials[matIdx]);
         }
-        const auto& vao = modelMesh.mesh.GetVertexArray();
-        RenderCommand::DrawIndexedInstanced(vao, m_InstanceCount);
+        RenderCommand::DrawIndexedInstanced(m_OwnVAOs[i], m_InstanceCount);
     }
 }
 

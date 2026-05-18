@@ -23,6 +23,8 @@ public:
     void Draw() const;
 
     const std::shared_ptr<VertexArray>& GetVertexArray() const { return m_VAO; }
+    const std::shared_ptr<VertexBuffer>& GetVertexBuffer() const { return m_VBO; }
+    const std::shared_ptr<IndexBuffer>& GetIndexBuffer() const { return m_EBO; }
 
     static Mesh CreateCube();
     static Mesh CreatePlane(float size = 10.0f);

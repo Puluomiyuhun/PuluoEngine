@@ -27,6 +27,8 @@ public:
 private:
     uint32_t m_RendererID = 0;
     uint32_t m_VertexBufferIndex = 0;
+    uint32_t m_InstanceStartIndex = 0;  // attribute index before instance buffer was added
+    bool m_HasInstanceBuffer = false;
     std::vector<std::shared_ptr<VertexBuffer>> m_VertexBuffers;
     std::shared_ptr<IndexBuffer> m_IndexBuffer;
 };
