@@ -35,7 +35,8 @@ public:
                  Vec2 jitter, Vec2 prevJitter,
                  uint32_t emptyVAO);
 
-    uint32_t GetOutputTexture() const { return m_OutputTexture; }
+    // After Resolve(), the current frame's result is in m_HistoryTexture (due to swap)
+    uint32_t GetOutputTexture() const { return m_HistoryTexture; }
     bool IsCreated() const { return m_FBO != 0; }
 
 private:

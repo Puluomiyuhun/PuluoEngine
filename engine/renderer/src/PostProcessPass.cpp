@@ -29,7 +29,7 @@ void PostProcessPass::Execute(RenderContext& ctx) {
         ctx.ssr->Generate(
             ctx.depthPrepassFB->GetDepthAttachmentID(),
             ctx.sceneFB->GetColorAttachmentID(),
-            ctx.camera->GetProjectionMatrix(),
+            ctx.camera->GetProjectionMatrixUnjittered(),
             ctx.camera->GetViewMatrix(),
             *ctx.ssrConfig,
             Vec2(static_cast<float>(fbSpec.width), static_cast<float>(fbSpec.height)),

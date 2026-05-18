@@ -38,6 +38,7 @@ CameraController::CameraController(float fovDegrees, float aspectRatio)
     : m_Fov(fovDegrees), m_AspectRatio(aspectRatio)
 {
     m_Camera = Camera::Perspective(m_Fov, m_AspectRatio, m_NearClip, m_FarClip);
+    m_JitteredProjection = m_Camera.GetProjection();
     UpdateVectors();
     UpdateViewMatrix();
 }

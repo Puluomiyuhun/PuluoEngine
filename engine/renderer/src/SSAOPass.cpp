@@ -23,7 +23,7 @@ void SSAOPass::Execute(RenderContext& ctx) {
 
     ctx.ssao->Generate(
         ctx.depthPrepassFB->GetDepthAttachmentID(),
-        ctx.camera->GetProjectionMatrix(),
+        ctx.camera->GetProjectionMatrixUnjittered(),
         ctx.emptyVAO);
 }
 

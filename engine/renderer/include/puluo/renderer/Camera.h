@@ -28,8 +28,8 @@ public:
     void OnUpdate(float deltaTime);
 
     const Mat4& GetViewMatrix() const { return m_ViewMatrix; }
-    const Mat4& GetProjectionMatrix() const { return m_Camera.GetProjection(); }
-    Mat4 GetViewProjection() const { return m_Camera.GetProjection() * m_ViewMatrix; }
+    const Mat4& GetProjectionMatrix() const { return m_JitteredProjection; }
+    Mat4 GetViewProjection() const { return m_JitteredProjection * m_ViewMatrix; }
 
     // TAA jitter support
     void SetJitter(float jx, float jy);

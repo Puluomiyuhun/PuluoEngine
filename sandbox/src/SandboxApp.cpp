@@ -945,7 +945,7 @@ public:
             ImVec2 vpMax = ImVec2(vpMin.x + vpSize.x, vpMin.y + vpSize.y);
             Puluo::DrawGizmo(*selected,
                              m_Camera.GetViewMatrix(),
-                             m_Camera.GetProjectionMatrix(),
+                             m_Camera.GetProjectionMatrixUnjittered(),
                              m_GizmoMode,
                              vpMin.x, vpMin.y,
                              vpMax.x - vpMin.x, vpMax.y - vpMin.y);
