@@ -1,11 +1,13 @@
 #version 450 core
 
-// SSR — Screen Space Reflections via linear ray march + binary search refinement
+// SSR — Screen-Space Reflections via screen-space ray march + binary refinement
+// Uses homogeneous-coordinate interpolation so each step is ~1 pixel on screen,
+// eliminating the banding/staircase artefacts of view-space fixed-step marching.
 
 in vec2 vTexCoord;
 out vec4 FragColor;
 
-uniform sampler2D uDepthTexture;   // slot 0 — depth prepass
+uniform sampler2D uDepthTexture;   // slot 0 — depth prepass (reversed-Z)
 uniform sampler2D uSceneColor;     // slot 1 — scene color
 
 uniform mat4 uProjection;
@@ -28,16 +30,22 @@ vec3 ViewPosFromDepth(vec2 uv) {
     return viewPos.xyz / viewPos.w;
 }
 
-// Project view-space position to screen UV
-vec3 ProjectToScreen(vec3 viewPos) {
-    vec4 clipPos = uProjection * vec4(viewPos, 1.0);
-    clipPos.xy /= clipPos.w;
-    vec2 uv = clipPos.xy * 0.5 + 0.5;
-    return vec3(uv, clipPos.w);
+// Return the raw depth buffer value at a UV
+float SampleDepth(vec2 uv) {
+    return texture(uDepthTexture, uv).r;
+}
+
+// Linearize a reversed-Z depth value to view-space Z (negative in OpenGL)
+// For reversed-Z infinite far: depth = near / (-z)
+//   => -z = near / depth  => z = -near / depth
+float LinearizeDepth(float d) {
+    // uProjection[3][2] == near for reversed-Z infinite-far projection
+    float near = uProjection[3][2];
+    return -near / max(d, 1e-7);
 }
 
 void main() {
-    float rawDepth = texture(uDepthTexture, vTexCoord).r;
+    float rawDepth = SampleDepth(vTexCoord);
 
     // Skip far plane (reversed-Z: sky = 0.0)
     if (rawDepth <= 0.0) {
@@ -62,53 +70,103 @@ void main() {
         return;
     }
 
-    // Linear ray march
-    float stepSize = uMaxDistance / float(uMaxSteps);
-    vec3 rayPos = viewPos;
-    vec3 rayStep = reflDir * stepSize;
+    // ---- Screen-space ray march ----
+    // Project start and a point along the ray into screen (pixel) coordinates.
+    // Then step uniformly in screen space, interpolating depth via 1/w.
 
+    vec3 rayEnd = viewPos + reflDir * uMaxDistance;
+
+    // Project both endpoints to clip space
+    vec4 clipStart = uProjection * vec4(viewPos, 1.0);
+    vec4 clipEnd   = uProjection * vec4(rayEnd, 1.0);
+
+    // Screen-space positions (pixels)
+    vec2 ssStart = (clipStart.xy / clipStart.w * 0.5 + 0.5) * uScreenSize;
+    vec2 ssEnd   = (clipEnd.xy   / clipEnd.w   * 0.5 + 0.5) * uScreenSize;
+
+    // Handle degenerate case where ray end is behind camera
+    if (clipEnd.w < 0.0) {
+        // Clip ray to near plane: find t where w interpolation crosses 0
+        float t = clipStart.w / (clipStart.w - clipEnd.w);
+        t = clamp(t - 0.01, 0.0, 1.0);
+        clipEnd = mix(clipStart, clipEnd, t);
+        ssEnd = (clipEnd.xy / clipEnd.w * 0.5 + 0.5) * uScreenSize;
+    }
+
+    vec2 ssDelta = ssEnd - ssStart;
+    float ssLength = max(abs(ssDelta.x), abs(ssDelta.y));
+
+    // Determine how many steps: ~1 pixel per step, capped by uMaxSteps
+    int numSteps = clamp(int(ssLength), 1, uMaxSteps);
+    float invSteps = 1.0 / float(numSteps);
+
+    // 1/w values for homogeneous interpolation (perspective-correct)
+    float invW0 = 1.0 / clipStart.w;
+    float invW1 = 1.0 / clipEnd.w;
+
+    // March
     vec2 hitUV = vec2(0.0);
     bool hit = false;
+    float marchT = 0.0;  // parametric position along ray at hit
 
-    for (int i = 0; i < uMaxSteps; i++) {
-        rayPos += rayStep;
+    // Precompute per-step deltas
+    vec2 ssStep = ssDelta * invSteps;
+    float invWStep = (invW1 - invW0) * invSteps;
 
-        vec3 projected = ProjectToScreen(rayPos);
-        vec2 sampleUV = projected.xy;
+    vec2 ssCur = ssStart;
+    float invWCur = invW0;
+
+    for (int i = 1; i <= numSteps; i++) {
+        ssCur += ssStep;
+        invWCur += invWStep;
+
+        vec2 uv = ssCur / uScreenSize;
 
         // Out of screen bounds
-        if (sampleUV.x < 0.0 || sampleUV.x > 1.0 || sampleUV.y < 0.0 || sampleUV.y > 1.0)
+        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
             break;
 
-        // Behind camera
-        if (projected.z < 0.0)
-            break;
+        // Perspective-correct interpolation of view-space Z
+        float t = float(i) * invSteps;
+        float rayZ = 1.0 / invWCur;  // w at this point = view-space -z (for perspective)
+        rayZ = -rayZ;  // view-space z is negative
 
-        float sampledDepth = ViewPosFromDepth(sampleUV).z;
-        float depthDiff = rayPos.z - sampledDepth;
+        // Sample scene depth and convert to linear view-space Z
+        float sceneDepthRaw = SampleDepth(uv);
+        if (sceneDepthRaw <= 0.0) continue;  // sky
+        float sceneZ = LinearizeDepth(sceneDepthRaw);
 
-        // Hit: ray is behind the surface but not too far behind
-        if (depthDiff > 0.0 && depthDiff < uThickness) {
-            hitUV = sampleUV;
+        // Check intersection: ray is behind surface (more negative z)
+        float depthDiff = rayZ - sceneZ;
+
+        if (depthDiff < 0.0 && depthDiff > -uThickness) {
+            hitUV = uv;
             hit = true;
+            marchT = t;
 
-            // Binary search refinement
-            vec3 binaryStep = rayStep * 0.5;
-            vec3 binaryPos = rayPos;
+            // Binary search refinement in parametric space
+            float lo = t - invSteps;
+            float hi = t;
+
             for (int j = 0; j < uBinarySearchSteps; j++) {
-                binaryPos -= binaryStep;
-                binaryStep *= 0.5;
+                float mid = (lo + hi) * 0.5;
 
-                vec3 bp = ProjectToScreen(binaryPos);
-                float bd = ViewPosFromDepth(bp.xy).z;
-                float bDiff = binaryPos.z - bd;
+                // Interpolate screen position and 1/w
+                float midInvW = mix(invW0, invW1, mid);
+                vec2 midSS = mix(ssStart, ssEnd, mid);
+                vec2 midUV = midSS / uScreenSize;
 
-                if (bDiff > 0.0) {
-                    binaryPos -= binaryStep;
+                float midRayZ = -1.0 / midInvW;
+                float midSceneRaw = SampleDepth(midUV);
+                float midSceneZ = LinearizeDepth(midSceneRaw);
+                float midDiff = midRayZ - midSceneZ;
+
+                if (midDiff < 0.0 && midDiff > -uThickness) {
+                    hi = mid;
+                    hitUV = midUV;
                 } else {
-                    binaryPos += binaryStep;
+                    lo = mid;
                 }
-                hitUV = bp.xy;
             }
             break;
         }
@@ -131,8 +189,7 @@ void main() {
     float facingFade = 1.0 - max(dot(viewDir, reflDir), 0.0);
 
     // Fade based on ray travel distance
-    float rayLength = length(rayPos - viewPos);
-    float distanceFade = 1.0 - clamp(rayLength / uMaxDistance, 0.0, 1.0);
+    float distanceFade = 1.0 - clamp(marchT, 0.0, 1.0);
 
     float confidence = screenFade * facingFade * distanceFade;
 
