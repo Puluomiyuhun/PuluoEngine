@@ -65,6 +65,9 @@ void PostProcessPass::Execute(RenderContext& ctx) {
     ctx.fxaaShader->SetFloat("uSaturation", ctx.saturation);
     ctx.fxaaShader->SetFloat("uContrast", ctx.contrast);
 
+    // TAA sharpening: apply when TAA provides the input to counteract blur
+    ctx.fxaaShader->SetFloat("uSharpen", ctx.taaEnabled ? 0.6f : 0.0f);
+
     glBindVertexArray(ctx.emptyVAO);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);

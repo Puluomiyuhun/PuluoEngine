@@ -17,6 +17,9 @@ uniform sampler2D uSSRTexture;
 uniform float uSaturation; // 0=grayscale, 1=normal, >1=oversaturated
 uniform float uContrast;   // 0.5=low, 1=normal, 2=high
 
+// TAA sharpening (counteracts TAA blur)
+uniform float uSharpen;    // 0=off, 0.5=subtle, 1.0=strong
+
 // FXAA quality parameters
 #define EDGE_THRESHOLD_MIN 0.0312  // Skip very dark edges (invisible aliasing)
 #define EDGE_THRESHOLD_MAX 0.125   // Skip low-contrast edges
@@ -198,6 +201,16 @@ void main() {
     if (uSSREnabled == 1) {
         vec4 ssr = texture(uSSRTexture, finalUV);
         FragColor.rgb = mix(FragColor.rgb, ssr.rgb, ssr.a);
+    }
+
+    // CAS-style sharpening (counteracts TAA blur)
+    if (uSharpen > 0.0) {
+        vec3 n = texture(uScreenTexture, finalUV + vec2(0.0,  texel.y)).rgb;
+        vec3 s = texture(uScreenTexture, finalUV + vec2(0.0, -texel.y)).rgb;
+        vec3 e = texture(uScreenTexture, finalUV + vec2( texel.x, 0.0)).rgb;
+        vec3 w = texture(uScreenTexture, finalUV + vec2(-texel.x, 0.0)).rgb;
+        vec3 blur = (n + s + e + w) * 0.25;
+        FragColor.rgb += (FragColor.rgb - blur) * uSharpen;
     }
 
     // Color grading: saturation then contrast
