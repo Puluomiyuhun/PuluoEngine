@@ -65,6 +65,9 @@ void PostProcessPass::Execute(RenderContext& ctx) {
     ctx.fxaaShader->SetFloat("uSaturation", ctx.saturation);
     ctx.fxaaShader->SetFloat("uContrast", ctx.contrast);
 
+    // FXAA toggle: off when spatial AA is None (PostProcessPass still runs for TAA/SSR/color grading)
+    ctx.fxaaShader->SetInt("uFXAAEnabled", ctx.fxaaEnabled ? 1 : 0);
+
     // TAA sharpening: apply when TAA provides the input to counteract blur
     ctx.fxaaShader->SetFloat("uSharpen", ctx.taaEnabled ? 0.6f : 0.0f);
 

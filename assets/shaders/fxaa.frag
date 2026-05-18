@@ -20,6 +20,9 @@ uniform float uContrast;   // 0.5=low, 1=normal, 2=high
 // TAA sharpening (counteracts TAA blur)
 uniform float uSharpen;    // 0=off, 0.5=subtle, 1.0=strong
 
+// FXAA toggle (allows passthrough when spatial AA = None)
+uniform int uFXAAEnabled;  // 0=off (passthrough), 1=on
+
 // FXAA quality parameters
 #define EDGE_THRESHOLD_MIN 0.0312  // Skip very dark edges (invisible aliasing)
 #define EDGE_THRESHOLD_MAX 0.125   // Skip low-contrast edges
@@ -45,6 +48,26 @@ void main() {
     if (uSSREnabled == 1) {
         vec4 ssr = texture(uSSRTexture, uv);
         colorCenter = mix(colorCenter, ssr.rgb, ssr.a);
+    }
+
+    // When FXAA is disabled, skip edge detection — just do SSR + sharpen + color grading
+    if (uFXAAEnabled == 0) {
+        FragColor = vec4(colorCenter, 1.0);
+        // Sharpening
+        if (uSharpen > 0.0) {
+            vec3 n = texture(uScreenTexture, uv + vec2(0.0,  texel.y)).rgb;
+            vec3 s = texture(uScreenTexture, uv + vec2(0.0, -texel.y)).rgb;
+            vec3 e = texture(uScreenTexture, uv + vec2( texel.x, 0.0)).rgb;
+            vec3 w = texture(uScreenTexture, uv + vec2(-texel.x, 0.0)).rgb;
+            vec3 blur = (n + s + e + w) * 0.25;
+            FragColor.rgb += (FragColor.rgb - blur) * uSharpen;
+        }
+        // Color grading
+        float g = Luma(FragColor.rgb);
+        FragColor.rgb = mix(vec3(g), FragColor.rgb, uSaturation);
+        FragColor.rgb = (FragColor.rgb - 0.5) * uContrast + 0.5;
+        FragColor.rgb = clamp(FragColor.rgb, 0.0, 1.0);
+        return;
     }
 
     float lumaCenter = Luma(colorCenter);
