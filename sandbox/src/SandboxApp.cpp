@@ -426,10 +426,25 @@ public:
         float fbHeight = static_cast<float>(fbSpec.height);
 
         if (m_TAAEnabled && fbWidth > 0 && fbHeight > 0) {
-            int idx = m_FrameCount % 16;
-            float jx = (Halton(idx + 1, 2) - 0.5f) * 2.0f / fbWidth;
-            float jy = (Halton(idx + 1, 3) - 0.5f) * 2.0f / fbHeight;
-            m_Camera.SetJitter(jx, jy);
+            // Detect camera movement by comparing unjittered VP
+            Puluo::Mat4 currentUnjitteredVP = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
+            if (currentUnjitteredVP != m_PrevViewProjection && m_FrameCount > 0) {
+                m_TAAStillFrames = 0;  // Camera moved, restart accumulation
+            } else {
+                m_TAAStillFrames++;
+            }
+
+            // Accumulate for 32 frames (two full Halton cycles), then freeze
+            if (m_TAAStillFrames < 32) {
+                int idx = m_FrameCount % 16;
+                float jx = (Halton(idx + 1, 2) - 0.5f) * 2.0f / fbWidth;
+                float jy = (Halton(idx + 1, 3) - 0.5f) * 2.0f / fbHeight;
+                m_Camera.SetJitter(jx, jy);
+                m_TAAConverged = false;
+            } else {
+                m_Camera.ClearJitter();
+                m_TAAConverged = true;
+            }
         } else {
             m_Camera.ClearJitter();
         }
@@ -754,19 +769,22 @@ public:
 
         // ---- TAA Resolve ----
         if (m_TAAEnabled && m_TAA && m_TAA->IsCreated()) {
-            // First frame: init prevVP to current unjittered VP (identity matrix would cause all-OOB reprojection)
+            // First frame: init prevVP to current unjittered VP
             if (m_FrameCount == 0) {
                 m_PrevViewProjection = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
             }
-            Puluo::Mat4 currentVP = m_Camera.GetProjectionMatrixJittered() * m_Camera.GetViewMatrix();
-            m_TAA->Resolve(
-                m_SceneFB->GetColorAttachmentID(),
-                m_DepthPrepassFB->GetDepthAttachmentID(),
-                currentVP,
-                m_PrevViewProjection,
-                m_Camera.GetJitter(),
-                m_Camera.GetPrevJitter(),
-                m_EmptyVAO);
+            // Skip resolve after convergence — frozen output stays in history texture
+            if (!m_TAAConverged) {
+                Puluo::Mat4 currentVP = m_Camera.GetProjectionMatrixJittered() * m_Camera.GetViewMatrix();
+                m_TAA->Resolve(
+                    m_SceneFB->GetColorAttachmentID(),
+                    m_DepthPrepassFB->GetDepthAttachmentID(),
+                    currentVP,
+                    m_PrevViewProjection,
+                    m_Camera.GetJitter(),
+                    m_Camera.GetPrevJitter(),
+                    m_EmptyVAO);
+            }
             m_PrevViewProjection = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
         }
 
@@ -952,9 +970,15 @@ public:
             }
 
             ImVec2 vpMax = ImVec2(vpMin.x + vpSize.x, vpMin.y + vpSize.y);
+            // ImGuizmo doesn't support reversed-Z projection — build standard perspective for gizmo
+            auto gizmoProj = glm::perspective(
+                glm::radians(m_Camera.GetFov()),
+                m_Camera.GetAspectRatio(),
+                m_Camera.GetNearClip(),
+                m_Camera.GetFarClip());
             Puluo::DrawGizmo(*selected,
                              m_Camera.GetViewMatrix(),
-                             m_Camera.GetProjectionMatrixUnjittered(),
+                             gizmoProj,
                              m_GizmoMode,
                              vpMin.x, vpMin.y,
                              vpMax.x - vpMin.x, vpMax.y - vpMin.y);
@@ -1769,6 +1793,8 @@ private:
     int m_SpatialAAMode = 2;  // 0=None, 1=FXAA, 2=MSAA 4x
     uint32_t m_FrameCount = 0;
     Puluo::Mat4 m_PrevViewProjection{1.0f};
+    uint32_t m_TAAStillFrames = 0;   // Consecutive frames with static camera
+    bool m_TAAConverged = false;      // True when TAA has accumulated enough and frozen
 
     Puluo::CameraController m_Camera;
     Puluo::LightManager m_Lights;
