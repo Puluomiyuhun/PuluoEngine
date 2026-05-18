@@ -92,6 +92,8 @@ void TAA::Resolve(uint32_t currentColor, uint32_t depthTexture,
     m_TAAShader->SetMat4("uCurrentVPInverse", currentVPInverse);
     m_TAAShader->SetMat4("uPrevVP", prevVP);
     m_TAAShader->SetVec2("uScreenSize", Vec2(static_cast<float>(m_Width), static_cast<float>(m_Height)));
+    // Jitter in pixel units for unjitter correction
+    m_TAAShader->SetVec2("uJitter", jitter * Vec2(static_cast<float>(m_Width), static_cast<float>(m_Height)) * 0.5f);
 
     // Bind textures
     glActiveTexture(GL_TEXTURE0);
