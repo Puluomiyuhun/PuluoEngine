@@ -785,18 +785,15 @@ public:
             if (m_FrameCount == 0) {
                 m_PrevViewProjection = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
             }
-            // Skip resolve after convergence — frozen output stays in history texture
-            if (!m_TAAConverged) {
-                Puluo::Mat4 currentVP = m_Camera.GetProjectionMatrixJittered() * m_Camera.GetViewMatrix();
-                m_TAA->Resolve(
-                    m_SceneFB->GetColorAttachmentID(),
-                    m_DepthPrepassFB->GetDepthAttachmentID(),
-                    currentVP,
-                    m_PrevViewProjection,
-                    m_Camera.GetJitter(),
-                    m_Camera.GetPrevJitter(),
-                    m_EmptyVAO);
-            }
+            Puluo::Mat4 currentVP = m_Camera.GetProjectionMatrixJittered() * m_Camera.GetViewMatrix();
+            m_TAA->Resolve(
+                m_SceneFB->GetColorAttachmentID(),
+                m_DepthPrepassFB->GetDepthAttachmentID(),
+                currentVP,
+                m_PrevViewProjection,
+                m_Camera.GetJitter(),
+                m_Camera.GetPrevJitter(),
+                m_EmptyVAO);
             m_PrevViewProjection = m_Camera.GetProjectionMatrixUnjittered() * m_Camera.GetViewMatrix();
         }
 
