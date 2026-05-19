@@ -73,6 +73,7 @@ uniform mat4  uLightSpaceMatrices[4];
 uniform float uCascadeSplits[4];
 uniform int   uCascadeCount;
 uniform float uShadowNormalBias;
+uniform float uShadowIntensity;
 uniform bool  uShadowEnabled;
 
 // SSAO
@@ -133,30 +134,58 @@ vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
 
 // ---- CSM Shadow Sampling ----
 
-// Sample shadow for a specific cascade (no bias computation, caller provides biasedPos)
+// 16-sample Poisson disk for soft shadow edges
+const vec2 poissonDisk[16] = vec2[](
+    vec2(-0.9420, -0.3990), vec2( 0.9456, -0.7686),
+    vec2(-0.0942, -0.9293), vec2( 0.3449,  0.2939),
+    vec2(-0.9154,  0.4572), vec2(-0.3478, -0.1714),
+    vec2( 0.1379,  0.8858), vec2( 0.6324, -0.2264),
+    vec2(-0.4857,  0.8210), vec2(-0.5528, -0.6458),
+    vec2( 0.7257,  0.4065), vec2( 0.2520, -0.5153),
+    vec2(-0.1678,  0.3562), vec2( 0.8345,  0.0150),
+    vec2(-0.7300, -0.0898), vec2( 0.4746,  0.7114)
+);
+
+// Per-pixel pseudo-random rotation to break up repeating patterns
+float poissonRotation(vec2 screenPos) {
+    return fract(sin(dot(screenPos, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831853;
+}
+
+// Sample shadow for a specific cascade. Returns -1.0 if the point is outside
+// this cascade's projection (caller should try the next cascade).
 float SampleShadowCascade(vec3 biasedPos, int idx) {
     vec4 lsPos = uLightSpaceMatrices[idx] * vec4(biasedPos, 1.0);
     vec3 projCoords = lsPos.xyz / lsPos.w;
     // XY: NDC [-1,1] → UV [0,1]; Z: already [0,1] from orthoZO
     projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
-    if (projCoords.x < 0.0 || projCoords.x > 1.0 ||
-        projCoords.y < 0.0 || projCoords.y > 1.0 ||
+    // Shrink valid region slightly so PCF kernel doesn't sample outside
+    float margin = 3.0 / float(textureSize(uShadowMap, 0).x);
+    if (projCoords.x < margin || projCoords.x > 1.0 - margin ||
+        projCoords.y < margin || projCoords.y > 1.0 - margin ||
         projCoords.z > 1.0) {
-        return 1.0;
+        return -1.0; // out of bounds — caller should try next cascade
     }
 
-    float shadow = 0.0;
+    // Rotated Poisson disk PCF — 16 samples with per-pixel rotation
+    float angle = poissonRotation(gl_FragCoord.xy);
+    float s = sin(angle);
+    float c = cos(angle);
+    mat2 rot = mat2(c, s, -s, c);
+
     vec2 texelSize = 1.0 / vec2(textureSize(uShadowMap, 0).xy);
-    for (int x = -2; x <= 2; x++) {
-        for (int y = -2; y <= 2; y++) {
-            shadow += texture(uShadowMap, vec4(
-                projCoords.xy + vec2(float(x), float(y)) * texelSize,
-                float(idx),
-                projCoords.z));
-        }
+    // Spread factor: wider kernel for farther cascades
+    float spread = 1.5 + float(idx) * 0.5;
+
+    float shadow = 0.0;
+    for (int i = 0; i < 16; i++) {
+        vec2 offset = rot * poissonDisk[i] * texelSize * spread;
+        shadow += texture(uShadowMap, vec4(
+            projCoords.xy + offset,
+            float(idx),
+            projCoords.z));
     }
-    shadow /= 25.0;
+    shadow /= 16.0;
     return shadow;
 }
 
@@ -173,40 +202,48 @@ float SampleShadowCSM(vec3 worldPos, vec3 normal) {
         }
     }
 
-    // Normal bias: push along normal to prevent acne
-    float biasScale = 1.0 + float(cascadeIndex) * 0.5;
-    vec3 biasedPos = worldPos + normal * uShadowNormalBias * biasScale;
+    // Try selected cascade, auto-promote to next if out of bounds (-1.0)
+    float shadowCurrent = -1.0;
+    for (int c = cascadeIndex; c < uCascadeCount; c++) {
+        float biasScale = 1.0 + float(c) * 0.25;
+        vec3 biasedPos = worldPos + normal * uShadowNormalBias * biasScale;
+        shadowCurrent = SampleShadowCascade(biasedPos, c);
+        if (shadowCurrent >= 0.0) {
+            cascadeIndex = c;
+            break;
+        }
+    }
+    if (shadowCurrent < 0.0) return 1.0;
 
-    float shadowCurrent = SampleShadowCascade(biasedPos, cascadeIndex);
-
-    // Blend between cascades at boundary to eliminate hard seams
-    // Use a transition zone of 30% of the cascade range
+    // Blend between cascades at boundary for smooth transition
     if (cascadeIndex < uCascadeCount - 1) {
         float splitDist = uCascadeSplits[cascadeIndex];
         float prevSplit = (cascadeIndex > 0) ? uCascadeSplits[cascadeIndex - 1] : 0.0;
         float cascadeRange = splitDist - prevSplit;
-        float transitionWidth = cascadeRange * 0.3;
-        float fadeStart = splitDist - transitionWidth;
+        float fadeStart = splitDist - cascadeRange * 0.4;
 
         if (dist > fadeStart) {
             float t = smoothstep(fadeStart, splitDist, dist);
             int nextIdx = cascadeIndex + 1;
-            // Interpolate bias between cascades for seamless transition
-            float nextBiasScale = 1.0 + float(nextIdx) * 0.5;
-            float blendedBias = mix(biasScale, nextBiasScale, t);
-            vec3 blendedBiasedPos = worldPos + normal * uShadowNormalBias * blendedBias;
-            float shadowNext = SampleShadowCascade(blendedBiasedPos, nextIdx);
-            shadowCurrent = mix(shadowCurrent, shadowNext, t);
+            float nextBiasScale = 1.0 + float(nextIdx) * 0.25;
+            vec3 nextBiasedPos = worldPos + normal * uShadowNormalBias * nextBiasScale;
+            float shadowNext = SampleShadowCascade(nextBiasedPos, nextIdx);
+            if (shadowNext >= 0.0) {
+                shadowCurrent = mix(shadowCurrent, shadowNext, t);
+            }
         }
     }
 
-    // Fade out shadows at the edge of the last cascade to avoid hard cutoff line
+    // Fade out at last cascade edge
     float maxShadowDist = uCascadeSplits[uCascadeCount - 1];
     float fadeOutStart = maxShadowDist * 0.8;
     if (dist > fadeOutStart) {
         float fadeOut = smoothstep(fadeOutStart, maxShadowDist, dist);
         shadowCurrent = mix(shadowCurrent, 1.0, fadeOut);
     }
+
+    // Apply shadow intensity (0=no shadow, 1=fully dark)
+    shadowCurrent = mix(1.0, shadowCurrent, uShadowIntensity);
 
     return shadowCurrent;
 }

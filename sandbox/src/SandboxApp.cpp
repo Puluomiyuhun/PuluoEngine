@@ -740,7 +740,7 @@ public:
                     static_cast<float>(fbSpec.width), static_cast<float>(fbSpec.height)));
                 m_WaterShader->SetMat4("uProjection", m_Camera.GetProjectionMatrix());
                 m_WaterShader->SetInt("uSceneColor", 10);
-                glBindTextureUnit(10, m_SceneColorCopy);
+                glBindTextureUnit(10, m_SceneColorCopy);   
 
                 if (m_DepthPrepassFB) {
                     m_WaterShader->SetInt("uDepthTexture", 11);
@@ -1078,7 +1078,7 @@ public:
 
         // Editor panels
         bool toolbarImport = false;
-        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_TAAEnabled, m_SpatialAAMode, m_Saturation, m_Contrast, m_SSAOConfig, m_SSRConfig, m_WeatherConfig);
+        Puluo::DrawToolbar(m_GizmoMode, toolbarImport, m_Camera, m_UseAtmosphere, m_AtmosphereParams, m_FogParams, m_CloudParams, m_TAAEnabled, m_SpatialAAMode, m_Saturation, m_Contrast, m_SSAOConfig, m_SSRConfig, m_WeatherConfig, m_CSMConfig);
         wantsImport = wantsImport || toolbarImport;
 
         Puluo::DrawSceneHierarchy(m_Scene, m_CommandHistory);
@@ -1866,7 +1866,7 @@ private:
     Puluo::RenderContext m_RenderCtx;
 
     // SSAO
-    std::unique_ptr<Puluo::SSAO> m_SSAO;
+    std::unique_ptr<Puluo::SSAO> m_SSAO; 
     Puluo::SSAOConfig m_SSAOConfig;
     std::unique_ptr<Puluo::Framebuffer> m_DepthPrepassFB;
     std::shared_ptr<Puluo::Shader> m_DepthPrepassModelShader;

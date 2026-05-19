@@ -10,6 +10,7 @@
 #include "puluo/renderer/Terrain.h"
 #include "puluo/renderer/SSAO.h"
 #include "puluo/renderer/SSR.h"
+#include "puluo/renderer/CascadedShadowMap.h"
 #include "puluo/renderer/InstancedMesh.h"
 #include "puluo/renderer/WeatherSystem.h"
 
@@ -35,7 +36,7 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                  FogParams& fogParams, CloudParams& cloudParams,
                  bool& taaEnabled, int& spatialAAMode, float& saturation, float& contrast,
                  SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
-                 WeatherConfig& weatherConfig);
+                 WeatherConfig& weatherConfig, CSMConfig& csmConfig);
 bool DrawGizmo(SceneObject& object, const Mat4& view, const Mat4& projection,
                GizmoMode mode, float viewportX, float viewportY, float viewportW, float viewportH);
 void DrawAssetBrowser(std::string& importPath, std::string& scenePath);

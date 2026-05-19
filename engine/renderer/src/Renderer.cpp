@@ -170,6 +170,7 @@ void Renderer::BindFrameUniforms(const std::shared_ptr<Shader>& shader) {
             s_CSM->GetCascadeSplits().data(), s_CSM->GetCascadeCount());
         shader->SetInt("uCascadeCount", static_cast<int>(s_CSM->GetCascadeCount()));
         shader->SetFloat("uShadowNormalBias", s_CSM->GetConfig().normalBias);
+        shader->SetFloat("uShadowIntensity", s_CSM->GetConfig().shadowIntensity);
     }
 
     // SSAO (slot 9) — must rebind every call; terrain clobbers this slot
@@ -521,6 +522,7 @@ void Renderer::RenderTerrain(const std::shared_ptr<Shader>& terrainShader,
             s_CSM->GetCascadeSplits().data(), s_CSM->GetCascadeCount());
         terrainShader->SetInt("uCascadeCount", static_cast<int>(s_CSM->GetCascadeCount()));
         terrainShader->SetFloat("uShadowNormalBias", s_CSM->GetConfig().normalBias);
+        terrainShader->SetFloat("uShadowIntensity", s_CSM->GetConfig().shadowIntensity);
     }
 
     // SSAO (slot 11)

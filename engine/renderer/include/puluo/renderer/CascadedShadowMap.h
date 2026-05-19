@@ -17,6 +17,7 @@ struct CSMConfig {
     float depthBiasConstant = 2.5f;
     float depthBiasSlope = 2.5f;
     float normalBias = 0.8f;        // world-space normal offset in shader
+    float shadowIntensity = 0.85f;   // 0=no shadow, 1=fully dark shadow
 };
 
 class CascadedShadowMap {

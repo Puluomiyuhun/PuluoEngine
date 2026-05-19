@@ -999,7 +999,7 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
                  FogParams& fogParams, CloudParams& cloudParams,
                  bool& taaEnabled, int& spatialAAMode, float& saturation, float& contrast,
                  SSAOConfig& ssaoConfig, SSRConfig& ssrConfig,
-                 WeatherConfig& weatherConfig) {
+                 WeatherConfig& weatherConfig, CSMConfig& csmConfig) {
     ImGui::Begin("Toolbar", nullptr, ImGuiWindowFlags_NoCollapse);
 
     ImGui::Text("Gizmo Mode:");
@@ -1088,6 +1088,10 @@ void DrawToolbar(GizmoMode& mode, bool& wantsImport, CameraController& camera,
 
         ImGui::Spacing();
         ImGui::Checkbox("Enable Shadows", &Renderer::s_ShadowEnabled);
+        if (Renderer::s_ShadowEnabled) {
+            ImGui::SliderFloat("Shadow Intensity", &csmConfig.shadowIntensity, 0.0f, 1.0f, "%.2f");
+            ImGui::DragFloat("Normal Bias", &csmConfig.normalBias, 0.01f, 0.0f, 5.0f, "%.2f");
+        }
     }
 
     ImGui::Separator();
