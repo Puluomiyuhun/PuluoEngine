@@ -91,6 +91,10 @@ void main() {
 
     float occlusion = 0.0;
 
+    // Depth-proportional bias: small near camera (preserves contact AO),
+    // larger far away (prevents self-occlusion from depth precision loss).
+    float effectiveBias = uBias * abs(fragPos.z) * 0.01;
+
     for (int i = 0; i < uKernelSize; i++) {
         vec3 samplePos = fragPos + TBN * uSamples[i] * uRadius;
 
@@ -103,7 +107,7 @@ void main() {
         float sampleDepth = ViewPosFromDepth(offset.xy).z;
 
         float rangeCheck = smoothstep(0.0, 1.0, uRadius / abs(fragPos.z - sampleDepth));
-        occlusion += (sampleDepth >= samplePos.z + uBias ? 1.0 : 0.0) * rangeCheck;
+        occlusion += (sampleDepth >= samplePos.z + effectiveBias ? 1.0 : 0.0) * rangeCheck;
     }
 
     float ao = pow(1.0 - (occlusion / float(uKernelSize)), uPower);
