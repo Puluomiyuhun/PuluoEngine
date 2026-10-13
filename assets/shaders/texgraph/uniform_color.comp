@@ -1,0 +1,23 @@
+#version 450 core
+// Atomic: Uniform Color
+//
+// Kernel convention shared by every texgraph atomic:
+//   - output image is always image unit 0, rgba16f
+//   - inputs arrive as sampler2D uIn0..uIn7 with companion int uHas0..uHas7
+//   - uSize is the output resolution in pixels
+//   - parameter uniform names come straight from the C++ ParamDecl, so there is
+//     no name mangling to keep in sync
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(rgba16f, binding = 0) uniform writeonly image2D uOut;
+
+uniform ivec2 uSize;
+uniform vec4  uColor;
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (gid.x >= uSize.x || gid.y >= uSize.y) return;
+
+    imageStore(uOut, gid, uColor);
+}

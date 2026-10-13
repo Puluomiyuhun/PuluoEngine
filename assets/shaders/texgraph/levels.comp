@@ -1,0 +1,48 @@
+#version 450 core
+// Atomic: Levels
+//
+// Parameter set follows SD's Levels node: in low / in mid / in high remap the
+// input, out low / out high clamp the output, and "intermediary clamp" decides
+// whether the remapped input is clamped to [0,1] before the output mapping.
+//
+// Note that "in mid" is NOT a gamma exponent -- it is the input value that
+// should land on mid grey, which is the more intuitive control and what SD
+// actually exposes. The exponent is derived from it.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(rgba16f, binding = 0) uniform writeonly image2D uOut;
+
+uniform ivec2 uSize;
+
+uniform sampler2D uIn0;
+uniform int       uHas0;
+
+uniform float uInLow;
+uniform float uInMid;
+uniform float uInHigh;
+uniform float uOutLow;
+uniform float uOutHigh;
+uniform int   uClamp;
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (gid.x >= uSize.x || gid.y >= uSize.y) return;
+
+    vec2 uv  = (vec2(gid) + 0.5) / vec2(uSize);
+    vec4 src = (uHas0 != 0) ? texture(uIn0, uv) : vec4(0.0, 0.0, 0.0, 1.0);
+
+    // Guard a zero-width input range against a divide by zero.
+    float span = max(uInHigh - uInLow, 1e-5);
+    vec3  v    = (src.rgb - vec3(uInLow)) / span;
+
+    if (uClamp != 0) v = clamp(v, 0.0, 1.0);
+
+    // mid is the input level that maps to 0.5, so solve 0.5 = mid^g for g.
+    float gamma = log(0.5) / log(clamp(uInMid, 0.001, 0.999));
+    v = pow(max(v, vec3(0.0)), vec3(gamma));
+
+    v = vec3(uOutLow) + v * (uOutHigh - uOutLow);
+
+    imageStore(uOut, gid, vec4(v, src.a));
+}

@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Global options
 option(PULUO_BUILD_EDITOR   "Build editor application"  OFF)
 option(PULUO_BUILD_SANDBOX  "Build sandbox application"  ON)
+option(PULUO_BUILD_DESIGNER "Build material designer"    ON)
 option(PULUO_BUILD_TESTS    "Build unit tests"           OFF)
 
 # Dependencies
@@ -23,6 +24,10 @@ endif()
 
 if(PULUO_BUILD_EDITOR)
     add_subdirectory(editor)
+endif()
+
+if(PULUO_BUILD_DESIGNER)
+    add_subdirectory(designer)
 endif()
 
 if(PULUO_BUILD_TESTS)

@@ -1,0 +1,47 @@
+#version 450 core
+// Output packing pass.
+//
+// Bridges the graph's linear, full-RGBA intermediates to the exact conventions
+// the engine's pbr.frag expects. This is the same job SD's output templates do
+// via usage tags, and keeping it as an explicit pass means the engine needs no
+// changes to consume graph results.
+//
+// pbr.frag reads:
+//   albedo    = pow(texture(uAlbedoMap).rgb, 2.2)   -> we must pre-encode sRGB
+//   metallic  = texture(uMetallicMap).b             -> glTF ORM packing
+//   roughness = texture(uRoughnessMap).g
+//   ao        = texture(uAOMap).r
+//   normal    = texture(uNormalMap).rgb * 2.0 - 1.0 -> already [0,1] encoded
+//
+// Broadcasting a grayscale source to all of rgb satisfies the .r/.g/.b reads
+// simultaneously, so one mode covers roughness, metallic and AO.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(rgba16f, binding = 0) uniform writeonly image2D uOut;
+
+uniform ivec2     uSize;
+uniform sampler2D uIn0;
+
+// 0 = sRGB encode (base color), 1 = grayscale broadcast, 2 = passthrough
+uniform int uPackMode;
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (gid.x >= uSize.x || gid.y >= uSize.y) return;
+
+    vec2 uv  = (vec2(gid) + 0.5) / vec2(uSize);
+    vec4 src = texture(uIn0, uv);
+
+    vec4 outv;
+    if (uPackMode == 0) {
+        // Cancel the de-gamma pbr.frag applies to albedo.
+        outv = vec4(pow(max(src.rgb, vec3(0.0)), vec3(1.0 / 2.2)), src.a);
+    } else if (uPackMode == 1) {
+        outv = vec4(vec3(src.r), 1.0);
+    } else {
+        outv = src;
+    }
+
+    imageStore(uOut, gid, outv);
+}

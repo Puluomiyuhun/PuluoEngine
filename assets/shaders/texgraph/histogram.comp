@@ -1,0 +1,28 @@
+#version 450 core
+// Luminance histogram over a graph texture.
+//
+// Feeds the Levels node's histogram editor and its Auto Level action (lowest
+// and highest occupied bin give the input range). 256 bins, atomically
+// accumulated, then read back once per re-evaluation -- 1 KB of readback for a
+// UI widget is not worth optimising.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(std430, binding = 0) buffer Histogram {
+    uint bins[256];
+};
+
+uniform sampler2D uIn0;
+uniform ivec2     uSize;
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (gid.x >= uSize.x || gid.y >= uSize.y) return;
+
+    vec2  uv = (vec2(gid) + 0.5) / vec2(uSize);
+    vec3  c  = texture(uIn0, uv).rgb;
+    float l  = dot(c, vec3(0.299, 0.587, 0.114));
+
+    uint b = uint(clamp(l, 0.0, 1.0) * 255.0 + 0.5);
+    atomicAdd(bins[b], 1u);
+}

@@ -57,6 +57,19 @@
 - 原生文件对话框 + ImGui 内置资产选择器
 - 场景序列化（`.pscene` JSON 格式）
 
+### 材质设计器（PuluoDesigner）
+
+节点式程序化材质工具，独立 exe，单向依赖引擎（引擎无感知）。
+
+- 节点图编辑器（手写 ImGui 画布）：拖拽连线、框选移动、滚轮光标锚定缩放、右键添加节点
+- 每个节点带纹理缩略图预览（棋盘格底 + 角色色条）
+- GPU 求值：compute shader 逐节点 dispatch，RGBA16F 纹理池复用，拓扑排序 + 结果记忆化
+- Atomic 节点：Uniform Color / Levels / Blend（8 种混合模式）
+- Levels 直方图编辑器：GPU 256-bin 直方图（log 刻度）、5 个可拖手柄、传递曲线叠加、Invert / Auto Level / 纯 slider 界面切换
+- 输出节点：Base Color / Normal / Roughness / Metallic / AO 五通道，分辨率 64–4096（存 log2，图分辨率无关）
+- 3D 预览：球体实时 PBR + IBL，与节点图同进程同 GL 上下文，**贴图零拷贝零落盘**直接喂给 pbr.frag
+- 2D 预览：双击节点查看其输出贴图
+
 ## 架构概览
 
 ```
@@ -67,8 +80,10 @@ PuluoEngine/
 │   ├── renderer/      # OpenGL 渲染封装（PBR、地形、粒子、天气、RenderPass、阴影、后处理）
 │   └── resource/      # 资源缓存（TextureCache/ModelCache）+ .passet 导入/加载
 ├── sandbox/           # 编辑器 / 运行时应用
+├── designer/          # 材质设计器（独立 exe，单向依赖引擎）
+│   └── src/{graph,gpu,ui,preview}
 ├── assets/
-│   ├── shaders/       # GLSL 着色器文件
+│   ├── shaders/       # GLSL 着色器文件（含 texgraph/ 下的 compute kernel）
 │   └── fonts/         # UI 字体
 └── cmake/             # 依赖管理（FetchContent）
 ```
@@ -94,7 +109,8 @@ PuluoEngine/
 
 - CMake 3.20+
 - 支持 C++20 的编译器（MSVC 2022 / GCC 12+ / Clang 15+）
-- 所有第三方依赖通过 CMake FetchContent 自动拉取，无需手动安装
+- Git 和 Python 3（glad 的 OpenGL loader 在配置阶段由 Python 生成，需要 `jinja2`）
+- 其余第三方依赖通过 CMake FetchContent 自动拉取，无需手动安装
 
 ### 编译步骤
 
@@ -105,12 +121,13 @@ cmake -B build
 cmake --build build --config Release
 ```
 
+构建目标由选项控制：`PULUO_BUILD_SANDBOX`（默认 ON）、`PULUO_BUILD_DESIGNER`（默认 ON）。
+
 ### 运行
 
 ```bash
-./build/sandbox/Release/PuluoSandbox   # Windows
-# 或
-./build/sandbox/PuluoSandbox            # Linux/macOS
+./build/sandbox/Release/PuluoSandbox     # 引擎编辑器
+./build/designer/Release/PuluoDesigner   # 材质设计器
 ```
 
 > 注：模型和 HDR 环境贴图等大文件资产未包含在仓库中，首次运行需自行放入 `assets/models/` 和 `assets/textures/hdr/` 目录。
@@ -131,6 +148,10 @@ cmake --build build --config Release
 - [x] RenderPass 抽象
 - [x] ImGui 编辑器 + Asset Browser + 主题
 - [x] 渲染统计 + 性能优化
+- [x] 材质节点系统（PuluoDesigner：节点图 + GPU 求值 + PBR 预览）
+- [ ] 材质设计器：灰度/彩色类型系统
+- [ ] 材质设计器：子图封装（库节点）
+- [ ] 材质设计器：Pixel Processor / FX-Map
 - [ ] 地形材质笔刷（Splat Map）
 - [ ] ECS 架构重构
 - [ ] RenderGraph

@@ -1,0 +1,56 @@
+#version 450 core
+// Atomic: Blend
+//
+// Composites foreground over background with an optional mask, mirroring SD's
+// slot order (Foreground, Background, Mask) and its opacity semantics.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(rgba16f, binding = 0) uniform writeonly image2D uOut;
+
+uniform ivec2 uSize;
+
+uniform sampler2D uIn0;  // foreground
+uniform sampler2D uIn1;  // background
+uniform sampler2D uIn2;  // mask (grayscale; red channel is read)
+uniform int       uHas0;
+uniform int       uHas1;
+uniform int       uHas2;
+
+uniform int   uMode;
+uniform float uOpacity;
+
+vec3 overlay(vec3 b, vec3 f) {
+    return mix(2.0 * b * f,
+               1.0 - 2.0 * (1.0 - b) * (1.0 - f),
+               step(vec3(0.5), b));
+}
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (gid.x >= uSize.x || gid.y >= uSize.y) return;
+
+    vec2 uv = (vec2(gid) + 0.5) / vec2(uSize);
+
+    vec4 fg = (uHas0 != 0) ? texture(uIn0, uv) : vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 bg = (uHas1 != 0) ? texture(uIn1, uv) : vec4(0.0, 0.0, 0.0, 1.0);
+
+    vec3 blended;
+    switch (uMode) {
+        case 0:  blended = fg.rgb;                                break; // Copy
+        case 1:  blended = bg.rgb + fg.rgb;                       break; // Add
+        case 2:  blended = bg.rgb - fg.rgb;                       break; // Subtract
+        case 3:  blended = bg.rgb * fg.rgb;                       break; // Multiply
+        case 4:  blended = max(bg.rgb, fg.rgb);                   break; // Max
+        case 5:  blended = min(bg.rgb, fg.rgb);                   break; // Min
+        case 6:  blended = 1.0 - (1.0 - bg.rgb) * (1.0 - fg.rgb); break; // Screen
+        case 7:  blended = overlay(bg.rgb, fg.rgb);               break; // Overlay
+        default: blended = fg.rgb;                                break;
+    }
+
+    float amount = uOpacity;
+    if (uHas2 != 0) amount *= texture(uIn2, uv).r;
+
+    vec3 result = mix(bg.rgb, blended, clamp(amount, 0.0, 1.0));
+    imageStore(uOut, gid, vec4(result, max(bg.a, fg.a)));
+}
