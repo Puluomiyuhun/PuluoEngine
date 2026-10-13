@@ -98,6 +98,7 @@ Mat4 CascadedShadowMap::ComputeLightSpaceMatrix(
         float d = glm::length(Vec3(c) - center);
         radius = std::max(radius, d);
     }
+
     // Round up to texel boundary to avoid sub-texel jitter
     float texelSize = (radius * 2.0f) / static_cast<float>(m_Config.resolution);
     radius = std::ceil(radius / texelSize) * texelSize;
@@ -134,9 +135,11 @@ Mat4 CascadedShadowMap::ComputeLightSpaceMatrix(
         maxZ = std::max(maxZ, lc.z);
     }
 
-    // Extend Z range generously to capture shadow casters behind the frustum
+    // Extend Z range to capture shadow casters outside the tight frustum.
+    // Only extend minZ (away from light, into the scene) to capture casters
+    // behind the frustum. Use both proportional and absolute minimum.
     float zRange = maxZ - minZ;
-    minZ -= zRange * 1.0f;
+    minZ -= std::max(zRange * 2.0f, radius);
 
     Mat4 lightProjection = glm::orthoZO(minX, maxX, minY, maxY, minZ, maxZ);
     return lightProjection * lightView;

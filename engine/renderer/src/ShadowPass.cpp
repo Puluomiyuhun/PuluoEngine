@@ -39,6 +39,14 @@ void ShadowPass::Setup(RenderContext& ctx) {
 void ShadowPass::Execute(RenderContext& ctx) {
     if (!IsEnabled()) return;
 
+    // Upload ALL instance matrices once (not camera-culled) so shadow casters
+    // behind the camera are included in every cascade's shadow map.
+    if (ctx.instancedMeshes && !ctx.instancedMeshes->empty()) {
+        for (auto& [idx, im] : *ctx.instancedMeshes) {
+            im->UploadAllInstances();
+        }
+    }
+
     for (uint32_t i = 0; i < ctx.csm->GetCascadeCount(); i++) {
         ctx.csm->BindCascade(i);
 
@@ -66,12 +74,12 @@ void ShadowPass::Execute(RenderContext& ctx) {
             }
         }
 
-        // --- Instanced meshes ---
+        // --- Instanced meshes (VBO already has all instances) ---
         if (ctx.shadowModelInstancedShader && ctx.instancedMeshes && !ctx.instancedMeshes->empty()) {
             ctx.shadowModelInstancedShader->Bind();
             ctx.shadowModelInstancedShader->SetMat4("uLightSpaceMatrix", lightSpaceMat);
             for (auto& [idx, im] : *ctx.instancedMeshes) {
-                im->DrawAllMeshesCulled();
+                im->DrawAllMeshes();
             }
         }
 
